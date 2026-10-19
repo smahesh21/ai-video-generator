@@ -1,0 +1,26 @@
+"use client";
+import Link from "next/link";
+import {useState} from "react";
+import {useStudio,type Project} from "./store";
+
+type View="needed"|"reconnect";
+function Connection({project}:{project:Project}){
+ const [view,setView]=useState<View>("needed");
+ const approved=project.storyboard?.approved?.version===project.storyboard?.version;
+ const publishPath=`/projects/${encodeURIComponent(project.id)}/publish`;
+ return <>
+  <nav className="workflow" aria-label="Creation progress">{["Idea","Storyboard","Video","Publish"].map((step,index)=><span key={step} className={index===3?"current":""} aria-current={index===3?"step":undefined}><b>{String(index+1).padStart(2,"0")}</b>{step}{index<3?<span className="step-line"/>:null}</span>)}</nav>
+  <div className="storyboard-top"><div><div className="eyebrow">04 / INSTAGRAM CONNECTION</div><h1>One last connection.</h1><p>See what the account setup and recovery experience will require.</p></div><Link className="button" href={approved?publishPath:`/projects/${encodeURIComponent(project.id)}/storyboard`}>← {approved?"Back to publish draft":"Back to storyboard"}</Link></div>
+  <div className="storyboard-meta"><span className="status"><i/>Local account preview</span><span>Instagram connection unavailable</span><span>No account data or tokens stored</span></div>
+  <div className="notice preview-notice">Instagram authorization is not connected in this prototype. These are interface examples only. No account access is requested and no post can be sent or scheduled.</div>
+  <div className="connection-layout"><section className="connection-panel"><div className="connection-panel-top"><span className="eyebrow">ACCOUNT STATUS</span><span className="connection-status">{view==="needed"?"Not connected":"Reconnect example"}</span></div><div className="connection-mark" aria-hidden="true">◎</div><h2>{view==="needed"?"Connect Instagram when it’s ready.":"The connection needs attention."}</h2><p>{view==="needed"?"A future secure connection will let you choose the Instagram account that receives your approved videos. No account is linked in this local studio.":"This is an example of an expired or interrupted connection. A real app would pause publishing, keep your draft safe, and ask you to reconnect before trying again."}</p><div className="connection-main-actions"><button className="primary" disabled title="Instagram authorization is not available in the local prototype.">{view==="needed"?"Connect Instagram":"Reconnect Instagram"}</button><span>Available after Meta integration</span></div><div className="connection-demo"><span className="eyebrow">PREVIEW ANOTHER STATE</span><div className="connection-demo-actions"><button className={view==="needed"?"selected":""} aria-pressed={view==="needed"} onClick={()=>setView("needed")}>Connection needed</button><button className={view==="reconnect"?"selected":""} aria-pressed={view==="reconnect"} onClick={()=>setView("reconnect")}>Reconnect needed</button></div><small>State switcher is for design review. It does not change an account connection.</small></div></section>
+  <aside className="connection-side"><section className="connection-panel"><span className="eyebrow">WHEN CONNECTION IS AVAILABLE</span><h2>A simple handoff.</h2><ol className="connection-steps"><li><span>01</span><div><strong>Choose an account</strong><p>Start the secure Instagram authorization flow.</p></div></li><li><span>02</span><div><strong>Review access</strong><p>Confirm the account and publishing permissions before continuing.</p></div></li><li><span>03</span><div><strong>Return to the post</strong><p>Check the video and caption, then choose Publish or Schedule.</p></div></li></ol></section><section className="connection-panel"><span className="eyebrow">THIS PROJECT</span><h2>What’s ready?</h2><ul className="readiness-list"><li><span className={approved?"readiness-done":"readiness-wait"}>{approved?"✓":"○"}</span><span>Storyboard <small>{approved?"Approved locally":"Approval needed"}</small></span></li><li><span className={project.publishDraft?.caption?"readiness-done":"readiness-wait"}>{project.publishDraft?.caption?"✓":"○"}</span><span>Caption draft <small>{project.publishDraft?.caption?"Saved in this browser":"Prepare it in Publish"}</small></span></li><li><span className="readiness-wait">○</span><span>Rendered video <small>Studio rendering is not connected</small></span></li><li><span className="readiness-wait">○</span><span>Instagram account <small>Authorization is not available yet</small></span></li></ul><Link className="button" href={approved?publishPath:`/projects/${encodeURIComponent(project.id)}/storyboard`}>{approved?"Return to publish draft →":"Review storyboard →"}</Link></section></aside></div>
+ </>;
+}
+export function InstagramConnection({id}:{id:string}){
+ const {projects,ready}=useStudio();
+ if(!ready)return <div className="skeleton" role="status">Opening account connection…</div>;
+ const project=projects.find(item=>item.id===id);
+ if(!project)return <div className="empty-state"><h1>This project isn’t available.</h1><p>It may have been deleted or saved in another browser.</p><Link className="button" href="/projects">Return to projects</Link></div>;
+ return <Connection key={id} project={project}/>;
+}

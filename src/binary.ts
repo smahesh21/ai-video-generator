@@ -1,0 +1,1 @@
+export function binarySteps(values:number[],target:number){let low=0,high=values.length-1;const result:{low:number;high:number;mid:number;found:boolean}[]=[];while(low<=high){const mid=Math.floor((low+high)/2);result.push({low,high,mid,found:values[mid]===target});if(values[mid]===target)break;if(values[mid]<target)low=mid+1;else high=mid-1;}return result;}

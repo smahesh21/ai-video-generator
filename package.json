@@ -1,0 +1,38 @@
+{
+  "name": "drishvo-video-pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "pipeline": "tsx src/cli.ts",
+    "test": "tsx --test tests/pipeline.test.ts",
+    "typecheck": "tsc --noEmit",
+    "test:integration": "tsx --test tests/integration.test.ts",
+    "review": "tsx src/review-server.ts",
+    "dev": "npm --prefix apps/studio run dev",
+    "build:studio": "npm --prefix apps/studio run build",
+    "typecheck:studio": "npm --prefix apps/studio run typecheck"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.409",
+    "@remotion/renderer": "4.0.409",
+    "remotion": "4.0.409",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "zod": "3.25.76",
+    "dotenv": "16.6.1",
+    "@fontsource/inter": "5.2.8",
+    "ffmpeg-static": "5.2.0",
+    "ffprobe-static": "3.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "@types/react": "19.1.6",
+    "@types/react-dom": "19.1.6",
+    "tsx": "4.20.3",
+    "typescript": "5.8.3"
+  }
+}
