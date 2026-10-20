@@ -1,4 +1,5 @@
 import {validatePlan,type Plan} from './contracts';
+import {createHash} from 'node:crypto';
 
 export type StudioScene={id:string;title:string;narration:string;visual:string;seconds:number};
 export type StudioSnapshot={id:string;topic:string;notes:string;audience:string;voice:'male'|'female';motif:'water'|'memory'|'binary'|'concept';storyboard:{version:number;scenes:StudioScene[];approved:{version:number;scenes:StudioScene[];at:string}}};
@@ -51,7 +52,7 @@ function labels(motif:StudioSnapshot['motif'],index:number,title:string):[string
  if(motif==='binary')return ['Current range','Next half'];
  return [title.slice(0,24),'Next idea'];
 }
-export function studioPlan(input:unknown,runId:string):Plan{
+export function studioPlan(input:unknown,runId:string,ownerId?:string):Plan{
  const project=validateStudioSnapshot(input);
  if(!safeId.test(runId))throw Error('Invalid render ID.');
  const motif=inferredMotif(project);
@@ -66,6 +67,6 @@ export function studioPlan(input:unknown,runId:string):Plan{
   const events=objects.map((object,item)=>({id:`${id}-event-${item+1}`,targetId:object.id,action:'reveal' as const,cue:{blockId,phrase,occurrence:1},offsetMs:item*180,durationMs:400}));
   return {id,type:index===0?'title' as const:index===5?'takeaway' as const:'labeled-diagram' as const,title:source.title,narration:[{id:blockId,text}],objects,events,holdMs:200,labelScale:1};
  });
- return validatePlan({schemaVersion:1,ownerId:'local',projectId:project.id,versionId:runId,parentVersionId:null,topic:project.topic,audience:project.audience||'Curious learners',learningObjective:`Explain ${project.topic}`.slice(0,600),language:'en',voicePreset:project.voice==='female'?'indian-english-female':'indian-english-male',mode:'fixture',sources:[{id:'studio-visual-directions',text:project.storyboard.approved.scenes.map((scene,index)=>`Scene ${index+1}: ${scene.visual}`).join('\n').slice(0,20000)}],warnings:['Studio fixture render: silent synthetic timing; no Gemini or ElevenLabs call. Scene title and narration match the approved storyboard. Visual directions are retained but simplified to supported schematic graphics. Human review is required.'],scenes});
+ return validatePlan({schemaVersion:1,ownerId:ownerId?'user_'+createHash('sha256').update(ownerId).digest('hex').slice(0,32):'local',projectId:project.id,versionId:runId,parentVersionId:null,topic:project.topic,audience:project.audience||'Curious learners',learningObjective:`Explain ${project.topic}`.slice(0,600),language:'en',voicePreset:project.voice==='female'?'indian-english-female':'indian-english-male',mode:'fixture',sources:[{id:'studio-visual-directions',text:project.storyboard.approved.scenes.map((scene,index)=>`Scene ${index+1}: ${scene.visual}`).join('\n').slice(0,20000)}],warnings:['Studio fixture render: silent synthetic timing; no Gemini or ElevenLabs call. Scene title and narration match the approved storyboard. Visual directions are retained but simplified to supported schematic graphics. Human review is required.'],scenes});
 }
 

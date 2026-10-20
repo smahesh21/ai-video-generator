@@ -8,12 +8,12 @@ const id=process.argv[2],mode=process.argv[3]??'start';
 if(!id)throw Error('Missing render ID');
 const dir=runDir(id),jobPath=path.join(dir,'studio-job.json');
 async function main(){
- const job=await readJson<{projectId:string;storyboardVersion:number;state:string;created:string}>(jobPath);
+ const job=await readJson<{ownerId?:string;projectId:string;storyboardVersion:number;state:string;created:string}>(jobPath);
  await writeJson(jobPath,{...job,state:'running',updated:new Date().toISOString(),error:null});
  try{
   if(mode==='start'){
    const input=await readJson(path.join(dir,'studio-request.json'));
-   const plan=studioPlan(input,id);
+   const plan=studioPlan(input,id,job.ownerId);
    const manifest=await createRun(plan);
    await approveRun(id,manifest.planHash,'local-studio-storyboard-review',true);
   }else if(mode!=='retry')throw Error('Invalid worker mode');

@@ -1,3 +1,5 @@
+import {accountMode} from "../../../../../lib/account-mode";
+import {accountJob} from "../../../../../lib/account-render";
 import {promises as fs} from "node:fs";
 import path from "node:path";
 import {jobDir,localRequest,readJob} from "../../../../../lib/local-render";
@@ -5,8 +7,9 @@ import {jobDir,localRequest,readJob} from "../../../../../lib/local-render";
 export const runtime="nodejs";
 
 export async function GET(request:Request,{params}:{params:Promise<{id:string}>}){
- if(!localRequest(request))return new Response("Local studio only.",{status:403});
  const {id}=await params;
+ if(accountMode){const access=await accountJob(request,id);if(access.status!==200)return new Response(access.error,{status:access.status});}
+ else if(!localRequest(request))return new Response("Local studio only.",{status:403});
  try{
   const job=await readJob(id);
   if(!job.outputReady)return new Response("Poster is not ready.",{status:404});

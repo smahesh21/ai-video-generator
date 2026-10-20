@@ -32,15 +32,15 @@ async function launch(id:string,mode:"start"|"retry"){
   worker.once("error",reject);
  });
 }
-export async function startJob(input:unknown){
+export async function startJob(input:unknown,ownerId?:string){
  const snapshot=validateStudioSnapshot(input);
  const id="studio_"+randomUUID().replaceAll("-","").slice(0,24);
- studioPlan(snapshot,id);
+ studioPlan(snapshot,id,ownerId);
  const dir=jobDir(id);
  await fs.mkdir(dir,{recursive:false});
  await writeJson(path.join(dir,"studio-request.json"),snapshot);
- await writeJson(path.join(dir,"studio-job.json"),{id,projectId:snapshot.id,storyboardVersion:snapshot.storyboard.version,state:"queued",created:new Date().toISOString(),updated:new Date().toISOString()});
- try{await launch(id,"start");}catch{await writeJson(path.join(dir,"studio-job.json"),{id,projectId:snapshot.id,storyboardVersion:snapshot.storyboard.version,state:"failed",error:"Could not start the local render worker.",retryable:false,updated:new Date().toISOString()});throw Error("Could not start the local render worker.");}
+ await writeJson(path.join(dir,"studio-job.json"),{id,ownerId,projectId:snapshot.id,storyboardVersion:snapshot.storyboard.version,state:"queued",created:new Date().toISOString(),updated:new Date().toISOString()});
+ try{await launch(id,"start");}catch{await writeJson(path.join(dir,"studio-job.json"),{id,ownerId,projectId:snapshot.id,storyboardVersion:snapshot.storyboard.version,state:"failed",error:"Could not start the local render worker.",retryable:false,updated:new Date().toISOString()});throw Error("Could not start the local render worker.");}
  return {id,projectId:snapshot.id,storyboardVersion:snapshot.storyboard.version};
 }
 export async function readJob(id:string){
