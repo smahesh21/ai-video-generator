@@ -11,6 +11,7 @@ import {uploadRenderMedia,removeRenderMedia,privateMediaConfigured} from './priv
 dotenv.config({path:path.join(process.cwd(),'apps','studio','.env.local')});
 const require=createRequire(import.meta.url);
 const {claimAccountJob,heartbeatAccountJob,finishAccountJob,expireAccountJobs,accountJobRecord}=require('../apps/studio/lib/account-jobs') as typeof import('../apps/studio/lib/account-jobs');
+const {recordWorkerPresence}=require('../apps/studio/lib/worker-presence') as typeof import('../apps/studio/lib/worker-presence');
 const {mongoClient}=require('../apps/studio/lib/mongo') as typeof import('../apps/studio/lib/mongo');
 const workerId=randomUUID();
 let stopping=false;
@@ -30,6 +31,7 @@ async function processJob(job:ClaimedJob){
    const manifest=await readJson<{stage?:string}>(path.join(dir,'manifest.json')).catch(()=>null);
    const current=await heartbeatAccountJob(job.ownerId,job.id,workerId,manifest?.stage??'plan');
    if(!current){lostLease=true;await fs.writeFile(cancelPath,'Worker lease expired.');return;}
+   await recordWorkerPresence(workerId,'busy',job.id).catch(error=>console.error('Worker presence update failed:',error));
    if(current.cancelRequested)await fs.writeFile(cancelPath,'Cancelled by creator.');
   }catch(error){lostLease=true;await fs.writeFile(cancelPath,'Worker could not renew its lease.');console.error('Render lease renewal failed:',error);}
   })().finally(()=>{heartbeatWrite=null;});
@@ -75,15 +77,18 @@ async function processJob(job:ClaimedJob){
 async function main(){
  if(!privateMediaConfigured())throw Error('Private R2 storage is required for account render workers.');
  console.log('Drishvo account render worker started.');
+ let lastIdlePresence=0;
  while(!stopping){
   try{
+   if(Date.now()-lastIdlePresence>=10_000){await recordWorkerPresence(workerId,'idle');lastIdlePresence=Date.now();}
    await expireAccountJobs();
    const job=await claimAccountJob(workerId);
-   if(job)await processJob(job);
+   if(job){await processJob(job);await recordWorkerPresence(workerId,'idle');lastIdlePresence=Date.now();}
    else await new Promise(resolve=>setTimeout(resolve,2000));
    if(process.argv.includes('--once'))break;
   }catch(error){console.error('Account worker loop error:',error);await new Promise(resolve=>setTimeout(resolve,5000));}
  }
+ await recordWorkerPresence(workerId,'stopped').catch(error=>console.error('Worker shutdown status failed:',error));
  await mongoClient().close();
 }
 void main().catch(error=>{console.error('Account worker stopped:',error);process.exitCode=1;});

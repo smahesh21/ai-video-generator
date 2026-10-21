@@ -4,6 +4,7 @@ import {useEffect,useState} from "react";
 import {useStudio,type Project} from "./store";
 
 type Job={id:string;projectId:string;storyboardVersion:number;state:string;stage:string;error:string|null;retryable:boolean;cancelRequested?:boolean;outputReady:boolean;updated:string;created?:string;replacementId?:string};
+type WorkerStatus={online:boolean;busy:number;lastSeen:string|null};
 const stages=[{key:"plan",title:"Preparing approved scenes"},{key:"speech",title:"Creating silent timing tracks"},{key:"compile",title:"Syncing captions and motion"},{key:"render",title:"Rendering vertical video"},{key:"validate",title:"Checking the finished MP4"}];
 function RenderPanel({project,save,accountMode}:{project:Project;save:(project:Project)=>Promise<boolean>;accountMode:boolean}){
  const [jobId,setJobId]=useState(project.renderJob&&project.renderJob.storyboardVersion===project.storyboard?.version?project.renderJob.id:"");
@@ -14,6 +15,7 @@ function RenderPanel({project,save,accountMode}:{project:Project;save:(project:P
  const [missing,setMissing]=useState(false);
  const [history,setHistory]=useState<Job[]>([]);
  const [historyError,setHistoryError]=useState("");
+ const [workerStatus,setWorkerStatus]=useState<WorkerStatus|"unavailable"|null>(null);
  const approved=project.storyboard!.approved!;
  async function refreshHistory(){
   if(!accountMode)return;
@@ -27,6 +29,21 @@ function RenderPanel({project,save,accountMode}:{project:Project;save:(project:P
  }
  useEffect(()=>{void refreshHistory();},[accountMode,project.id,approved.version]);
  useEffect(()=>{if(job?.state==="ready"||job?.state==="failed"||job?.state==="cancelled"||job?.state==="interrupted")void refreshHistory();},[job?.state]);
+ useEffect(()=>{
+  if(!accountMode||job?.state!=="queued"){setWorkerStatus(null);return;}
+  let active=true,requesting=false;
+  let controller:AbortController|undefined;
+  async function refresh(){
+   if(requesting)return;
+   requesting=true;controller=new AbortController();
+   try{const response=await fetch('/api/render-worker',{cache:'no-store',signal:controller.signal});if(!response.ok)throw Error('Worker status unavailable.');const status=await response.json() as WorkerStatus;if(active)setWorkerStatus(status);}
+   catch{if(active)setWorkerStatus('unavailable');}
+   finally{requesting=false;}
+  }
+  void refresh();
+  const timer=window.setInterval(()=>{void refresh();},10000);
+  return()=>{active=false;window.clearInterval(timer);controller?.abort();};
+ },[accountMode,job?.state]);
  useEffect(()=>{
   if(!jobId)return;
   let active=true;
@@ -100,6 +117,7 @@ function RenderPanel({project,save,accountMode}:{project:Project;save:(project:P
   <div className="render-layout"><section className="render-panel"><div className="render-heading"><span className="eyebrow">RENDER JOB</span><span className="render-state">{state.replaceAll("-"," ")}</span></div><h2>{job?.outputReady?"Your test video is ready.":job?.state==="cancelled"?"This render was cancelled.":job?.state==="interrupted"?"This render was interrupted.":job?.cancelRequested?"Stopping your render.":job?.state==="failed"?"This render needs attention.":missing?"The saved render is unavailable.":jobId?"Your video is being prepared.":"Ready when you are."}</h2><p className="render-subcopy">{job?.outputReady?"Play or download the fixture MP4 below. Narration is intentionally silent.":job?.state==="cancelled"?"No MP4 was created. Your approved storyboard is unchanged.":job?.state==="interrupted"?"The local worker stopped before finishing. Your approved storyboard is safe; start a fresh render.":job?.cancelRequested?"The worker is stopping and clearing the partial video. This can take a moment.":job?.state==="failed"?job.error||"The render stopped. Your approved storyboard is unchanged.":missing?"The saved job cannot be found on this device. Your approved storyboard is safe; you can start a new local render.":jobId?"This job keeps running if you leave the page. You can return to it from the Video step.":"Starting a render creates local files on this laptop. It can take several minutes."}</p>{(!jobId||missing||job?.state==="cancelled"||job?.state==="interrupted")?<button className="primary" onClick={start} disabled={busy}>{busy?"Starting…":missing||job?.state==="cancelled"||job?.state==="interrupted"?"Start a new local render →":"Render silent test video →"}</button>:null}{(job?.state==="queued"||job?.state==="running")&&!job.cancelRequested?<button type="button" onClick={cancel} disabled={busy}>Cancel render</button>:null}{job?.state==="failed"&&job.retryable?<button className="primary" onClick={retry} disabled={busy}>{busy?"Retrying…":"Retry this render →"}</button>:null}{job?.state==="failed"&&!job.retryable?<Link className="button" href={`/projects/${encodeURIComponent(project.id)}/storyboard`}>Review storyboard →</Link>:null}<p className="form-message" role="status">{message}</p>{jobId?<div className="render-job-id">Render ID: {jobId}</div>:null}
   {job?.outputReady?<div className="render-output"><video controls preload="metadata" playsInline poster={`/api/renders/${encodeURIComponent(jobId)}/poster`} src={videoUrl} aria-label="Rendered silent test video"/><a className="button primary" href={`${videoUrl}?download=1`} download>Download MP4 ↓</a><button type="button" onClick={start} disabled={busy}>{busy?"Starting…":"Render this storyboard again ↻"}</button><Link className="button" href={`/projects/${encodeURIComponent(project.id)}/publish`}>Prepare publish draft →</Link><span>Silent fixture · schematic motion graphics · synthetic timing · not publish-ready</span></div>:null}</section>
   <aside className="render-panel"><span className="eyebrow">PRODUCTION STAGES</span><h2>Where the job stands</h2><ol className="render-stages">{stages.map((step,i)=><li key={step.key} className={index>i||job?.outputReady?"done":index===i&&job?.state==="running"?"active":""}><span>{index>i||job?.outputReady?"✓":String(i+1).padStart(2,"0")}</span><div><strong>{step.title}</strong><small>{index>i||job?.outputReady?"Completed":index===i&&job?.state==="running"?"In progress":"Waiting"}</small></div></li>)}</ol><p className="render-subcopy">Progress is reported from actual pipeline checkpoints. Rendering percentage and time remaining are not estimated.</p></aside></div>
+  {accountMode&&job?.state==="queued"?<div className="notice preview-notice" role="status">{workerStatus===null?"Checking video processing availability…":workerStatus==="unavailable"?"Video processing status is unavailable. Your render remains saved in the queue.":!workerStatus.online?"Video processing is offline. Your render is saved and will start when processing returns.":workerStatus.busy>0?"Video processing is busy. Your render will start when a slot opens.":"Video processing is available. Your render should start shortly."}</div>:null}
   {accountMode?<section className="render-panel render-history"><span className="eyebrow">SAVED RENDERS</span><h2>Earlier renders of this storyboard</h2><p className="render-subcopy">Up to 20 recent jobs are listed for this approved version. Completed videos can be played or downloaded here.</p>{historyError?<p className="form-message" role="alert">{historyError}</p>:null}{history.length?<ul>{history.map(item=><li key={item.id}><div><strong>{item.outputReady?"Ready":item.state==="missing"?"Files unavailable":item.state.replaceAll("-"," ")}</strong><small>{item.created?new Date(item.created).toLocaleString():"Saved render"} · {item.id}</small></div><button type="button" disabled={item.id===jobId||item.state==="missing"} onClick={()=>{setJob(null);setMissing(false);setMessage("");setJobId(item.id);}}>{item.id===jobId?"Viewing":"Open render"}</button></li>)}</ul>:<p className="render-subcopy">No saved renders for this storyboard yet.</p>}</section>:null}
  </>;
 }

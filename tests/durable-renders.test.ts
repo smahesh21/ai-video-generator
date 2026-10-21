@@ -3,6 +3,7 @@ import {test} from 'node:test';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
 const {accountJobStatus,durableReadyJob,durableActiveJob}=require('../apps/studio/lib/account-jobs') as typeof import('../apps/studio/lib/account-jobs');
+const {workerIsOnline}=require('../apps/studio/lib/worker-presence') as typeof import('../apps/studio/lib/worker-presence');
 
 test('completed private renders remain ready without local job files',async()=>{
  const record={id:'studio_'+'b'.repeat(24),ownerId:'owner',projectId:'project',storyboardVersion:2,created:'2026-10-21T00:00:00.000Z',readyAt:'2026-10-21T00:01:00.000Z',mediaStorage:'r2' as const};
@@ -43,4 +44,11 @@ test('queued account renders keep their saved state until a worker claims them',
  assert.equal(failed?.retryable,true);
  const expired=durableActiveJob({...base,state:'running' as const,leaseUntil:'2026-10-21T00:01:00.000Z'},Date.parse('2026-10-21T00:01:01.000Z'));
  assert.equal(expired?.state,'interrupted');
+});
+
+test('worker availability expires after a missed heartbeat or an explicit stop',()=>{
+ const lastSeen=new Date('2026-10-21T00:00:00.000Z');
+ assert.equal(workerIsOnline({id:'worker',state:'idle',lastSeen},lastSeen.getTime()+10_000),true);
+ assert.equal(workerIsOnline({id:'worker',state:'busy',lastSeen},lastSeen.getTime()+25_001),false);
+ assert.equal(workerIsOnline({id:'worker',state:'stopped',lastSeen},lastSeen.getTime()+10_000),false);
 });
