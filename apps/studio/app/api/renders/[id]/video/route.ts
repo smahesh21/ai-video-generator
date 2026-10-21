@@ -8,9 +8,9 @@ import {privateMediaSize,readPrivateMedia} from "../../../../../../../src/privat
 export const runtime="nodejs";
 export async function GET(request:Request,{params}:{params:Promise<{id:string}>}){
  const {id}=await params;
- if(accountMode){const access=await accountJob(request,id);if(access.status!==200)return new Response(access.error,{status:access.status});}
- else if(!localRequest(request))return new Response("Local studio only.",{status:403});
- const job=await readJob(id).catch(()=>null);
+ let job:{outputReady:boolean;mediaStorage?:string}|null;
+ if(accountMode){const access=await accountJob(request,id);if(access.status!==200)return new Response(access.error,{status:access.status});job=access.job;}
+ else{if(!localRequest(request))return new Response("Local studio only.",{status:403});job=await readJob(id).catch(()=>null);}
  if(!job?.outputReady)return new Response("Video is not ready.",{status:404});
  const remote=job.mediaStorage==="r2";
  const file=path.join(jobDir(id),"output.mp4");

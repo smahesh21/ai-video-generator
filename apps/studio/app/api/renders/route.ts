@@ -25,7 +25,7 @@ export async function POST(request:Request){
   if(accountMode){
    const checked=await accountSnapshot(request,input);
    if(checked.status!==200)return Response.json({error:checked.error},{status:checked.status});
-   const job=await startJob(checked.snapshot,checked.identity.id,prepared=>recordAccountJob(checked.identity.id,prepared));
+   const job=await startJob(checked.snapshot,checked.identity.id,prepared=>recordAccountJob(checked.identity.id,{...prepared,snapshot:checked.snapshot}));
    return Response.json(job,{status:202,headers:{"Cache-Control":"private, no-store"}});
   }
   const job=await startJob(input);

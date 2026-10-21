@@ -8,7 +8,7 @@
   },
   "scripts": {
     "pipeline": "tsx src/cli.ts",
-    "test": "tsx --test tests/pipeline.test.ts tests/studio-approvals.test.ts tests/private-media.test.ts",
+    "test": "tsx --test tests/pipeline.test.ts tests/studio-approvals.test.ts tests/private-media.test.ts tests/durable-renders.test.ts",
     "typecheck": "tsc --noEmit",
     "test:integration": "tsx --test tests/integration.test.ts",
     "review": "tsx src/review-server.ts",

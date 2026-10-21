@@ -9,9 +9,9 @@ export const runtime="nodejs";
 
 export async function GET(request:Request,{params}:{params:Promise<{id:string}>}){
  const {id}=await params;
- if(accountMode){const access=await accountJob(request,id);if(access.status!==200)return new Response(access.error,{status:access.status});}
- else if(!localRequest(request))return new Response("Local studio only.",{status:403});
- const job=await readJob(id).catch(()=>null);
+ let job:{outputReady:boolean;mediaStorage?:string}|null;
+ if(accountMode){const access=await accountJob(request,id);if(access.status!==200)return new Response(access.error,{status:access.status});job=access.job;}
+ else{if(!localRequest(request))return new Response("Local studio only.",{status:403});job=await readJob(id).catch(()=>null);}
  if(!job?.outputReady)return new Response("Poster is not ready.",{status:404});
  try{
   const image=job.mediaStorage==="r2"?await readPrivateMedia(id,"poster"):await fs.readFile(path.join(jobDir(id),"preview-frames","scene-0.png"));
