@@ -17,12 +17,15 @@ async function main(){
    const manifest=await createRun(plan);
    await approveRun(id,manifest.planHash,'local-studio-storyboard-review',true);
   }else if(mode!=='retry')throw Error('Invalid worker mode');
-  const result=await generate(id);
+  const result=await generate(id,{cancelFile:path.join(dir,'cancel.request')});
   await writeJson(jobPath,{...job,state:'ready',updated:new Date().toISOString(),error:null,outputHash:result.outputHash});
  }catch(error){
   const message=error instanceof Error?error.message:'Render failed';
-  const retryable=await exists(path.join(dir,'approval.json'));
-  await writeJson(jobPath,{...job,state:'failed',updated:new Date().toISOString(),error:message,retryable});
+  const manifest=await readJson<{state:string}>(path.join(dir,'manifest.json')).catch(()=>null);
+  const cancelled=manifest?.state==='cancelled';
+  const retryable=!cancelled&&await exists(path.join(dir,'approval.json'));
+  if(cancelled)await Promise.all(['output.partial.mp4','output.mp4'].map(file=>fs.rm(path.join(dir,file),{force:true}).catch(()=>{})));
+  await writeJson(jobPath,{...job,state:cancelled?'cancelled':'failed',updated:new Date().toISOString(),error:cancelled?null:message,retryable});
   process.exitCode=1;
  }finally{
   if(mode==='retry')await fs.unlink(path.join(dir,'studio-retry.lock')).catch(()=>{});

@@ -22,15 +22,20 @@ export async function approveRun(id:string,expectedHash:string,actor:string,fixt
  const dir=runDir(id);return withLock(dir,async()=>{const plan=validatePlan(await readJson(path.join(dir,'plan.json')));if(hash(plan)!==expectedHash)throw Error('Stale plan hash: review current plan before approval');if(!actor.trim())throw Error('Approving actor is required');if(fixtureOnly&&plan.mode!=='fixture')throw Error('Fixture test approval cannot approve live content');await writeJson(path.join(dir,'approval.json'),{planHash:expectedHash,actor,at:new Date().toISOString(),kind:fixtureOnly?'fixture-test':'explicit-review'});const m=await readJson<Manifest>(manifestFile(dir));await state(dir,m,'approved','approval');});
 }
 export function checkApproval(plan:Plan,approval:{planHash:string;kind:string}){if(approval.planHash!==hash(plan))throw Error('Stale approval: plan changed after approval');if(plan.mode==='live'&&approval.kind!=='explicit-review')throw Error('Live plan needs explicit review approval');}
-export async function generate(id:string,options:{allowLive?:boolean;failAfterSpeech?:boolean;stillsOnly?:boolean}={}){
+export async function generate(id:string,options:{allowLive?:boolean;failAfterSpeech?:boolean;stillsOnly?:boolean;cancelFile?:string}={}){
  const dir=runDir(id);return withLock(dir,async()=>{
  const plan=validatePlan(await readJson(path.join(dir,'plan.json')));const approval=await readJson(path.join(dir,'approval.json')).catch(()=>{throw Error('Review the storyboard and approve its hash first');});checkApproval(plan,approval);
  if(plan.mode==='live'&&!options.allowLive)throw Error('Live generation requires --allow-live; provider usage may be billed');
  const config=speechConfig(plan);const m=await readJson<Manifest>(manifestFile(dir));
  if(m.state==='ready-for-review'&&m.outputHash){if(!await exists(path.join(dir,'output.mp4'))||await fileHash(path.join(dir,'output.mp4'))!==m.outputHash)throw Error('Completed output missing or changed. Create a new revision; do not silently replace a reviewed output.');return m;}
- let cancelled=false;const {cancelSignal,cancel}=makeCancelSignal();const onCancel=()=>{cancelled=true;cancel();};process.on('SIGINT',onCancel);
- const assertActive=()=>{if(cancelled)throw Error('Cancelled by operator');};
+ let cancelled=false;const {cancelSignal,cancel}=makeCancelSignal();const onCancel=()=>{if(!cancelled){cancelled=true;cancel();}};process.on('SIGINT',onCancel);
+ let checking=false;
+ const poll=options.cancelFile?setInterval(async()=>{if(checking||cancelled)return;checking=true;try{if(await exists(options.cancelFile!))onCancel();}finally{checking=false;}},250):null;
+ poll?.unref();
+ const assertActive=()=>{if(cancelled)throw Error(options.cancelFile?'Cancelled by creator':'Cancelled by operator');};
  try{
+ if(options.cancelFile&&await exists(options.cancelFile))onCancel();
+ assertActive();
  m.error=undefined;m.speechCreated=0;m.speechReused=0;await state(dir,m,'running','speech');
  await fs.mkdir(path.join(dir,'public'),{recursive:true});
  const fontSource=path.join(ROOT,'node_modules/@fontsource/inter/files/inter-latin-400-normal.woff2');await fs.copyFile(fontSource,path.join(dir,'public/inter.woff2'));const fontHash=await fileHash(fontSource);
@@ -50,12 +55,12 @@ export async function generate(id:string,options:{allowLive?:boolean;failAfterSp
  assertActive();await writeJson(path.join(dir,'speech.json'),artifacts);await state(dir,m,'running','compile');
  const timeline=compile(plan,artifacts,fontHash);await writeJson(path.join(dir,'timeline.json'),timeline);await writeJson(path.join(dir,'captions.json'),timeline.scenes.map(s=>({sceneId:s.scene.id,startFrame:s.start,captions:s.captions})));
  if(options.failAfterSpeech){await state(dir,m,'running','render');throw Error('Injected failure after speech for recovery testing');}
- assertActive();m.renderAttempts++;await state(dir,m,'running','render');await renderVideo(dir,timeline,{stillsOnly:options.stillsOnly,cancelSignal});assertActive();
+ assertActive();m.renderAttempts++;await state(dir,m,'running','render');await renderVideo(dir,timeline,{stillsOnly:options.stillsOnly,cancelSignal,isCancelled:()=>cancelled});assertActive();
  if(options.stillsOnly){await state(dir,m,'ready-for-review','stills-only');return m;}
  await state(dir,m,'running','validate');const qa=await validateVideo(path.join(dir,'output.mp4'),timeline.durationInFrames,plan.mode);await writeJson(path.join(dir,'qa.json'),{...qa,planHash:hash(plan),fontHash,speechCreated:m.speechCreated,speechReused:m.speechReused,verifiedAt:new Date().toISOString(),limitations:plan.mode==='fixture'?['Silent fixture audio','Synthetic timing','No live providers or Indian voices tested']:['Strict original-text alignment; unsupported normalization fails closed','Human listening and factual review pending']});
  m.outputHash=await fileHash(path.join(dir,'output.mp4'));await state(dir,m,'ready-for-review','complete');
  await atomic(path.join(dir,'review.html'),'<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>drishvo.co.in video review</title><style>body{background:#f4f5ed;color:#294934;font:16px/1.7 system-ui;max-width:900px;margin:30px auto;padding:24px}video{width:min(100%,360px);display:block;border-radius:18px}a{color:inherit}code{overflow-wrap:anywhere}</style><h1>'+html(plan.topic)+'</h1><p>'+html(plan.mode==='fixture'?'SILENT FIXTURE — no live AI generation or voiceover. Synthetic timing tests the pipeline only.':'Live provider output — human quality review pending.')+'</p><video controls src="output.mp4"></video><p><a href="output.mp4" download>Download MP4</a> · <a href="plan-review.html">Storyboard</a> · <a href="qa.json">Machine checks</a> · <a href="evaluation.md">Human scorecard</a></p></html>');
  return m;
- }catch(error){m.error=error instanceof Error?error.message:'Pipeline failed';await state(dir,m,cancelled?'cancelled':m.stage==='compile'?'needs-input':'failed',m.stage);throw error;}finally{process.off('SIGINT',onCancel);}
+ }catch(error){m.error=error instanceof Error?error.message:'Pipeline failed';await state(dir,m,cancelled?'cancelled':m.stage==='compile'?'needs-input':'failed',m.stage);throw error;}finally{if(poll)clearInterval(poll);process.off('SIGINT',onCancel);}
  });
 }

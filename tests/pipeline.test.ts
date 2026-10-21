@@ -2,10 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {promises as fs} from 'node:fs';
 import path from 'node:path';
+import {randomUUID} from 'node:crypto';
 import {fixturePlan} from '../src/fixtures';
 import {hash,validatePlan,speechInput,findPhrase,binarySteps,type SpeechArtifact} from '../src/contracts';
 import {fixtureAlignment,validateAlignment,compile,silentWav,speechKey} from '../src/timing';
-import {checkApproval} from '../src/pipeline';
+import {approveRun,checkApproval,createRun,generate} from '../src/pipeline';
 import {runDir,withLock} from '../src/storage';
 import {extractPlannerText,planLive,providerJson,synthesize} from '../src/providers';
 import {studioPlan,validateStudioSnapshot,type StudioSnapshot} from '../src/studio-plan';
@@ -60,6 +61,21 @@ test('binary search unsorted input rejected',()=>{const p=fixturePlan('binary','
 test('missing binary target terminates safely',()=>{const states=binarySteps([1,3,5],4);assert(states.length<=3);assert(states.every(s=>!s.found));});
 test('explicit spoken and caption forms remain separate',()=>{const p=plan();const b=p.scenes[0].narration[0];b.spokenText=b.text.replace('Water','Two water');b.captionText='Water moves around Earth.';p.scenes[0].events[0].cue.phrase='Two water';const t=compile(p,artifacts(p),'font');assert.equal(t.scenes[0].captions[0].text,b.captionText);});
 test('single writer lock rejects concurrent runs and releases on failure',async()=>{const dir=path.join(process.cwd(),'.cache','test-lock-'+process.pid);await fs.mkdir(dir,{recursive:true});await withLock(dir,async()=>{await assert.rejects(()=>withLock(dir,async()=>null),/locked/);});await assert.rejects(()=>withLock(dir,async()=>{throw Error('injected');}),/injected/);await withLock(dir,async()=>null);});
+test('a cancellation request stops an approved fixture before rendering',async()=>{
+ const id='cancel-test-'+randomUUID().replaceAll('-','').slice(0,20);
+ const dir=runDir(id);
+ assert.equal(path.relative(path.join(process.cwd(),'runs'),dir),id);
+ try{
+  const created=await createRun(fixturePlan('water',id));
+  await approveRun(id,created.planHash,'test',true);
+  const cancelFile=path.join(dir,'cancel.request');
+  await fs.writeFile(cancelFile,'test');
+  await assert.rejects(()=>generate(id,{cancelFile}),/Cancelled by creator/);
+  const manifest=JSON.parse(await fs.readFile(path.join(dir,'manifest.json'),'utf8'));
+  assert.equal(manifest.state,'cancelled');
+  await assert.rejects(()=>fs.access(path.join(dir,'output.mp4')));
+ }finally{await fs.rm(dir,{recursive:true,force:true});}
+});
 test('provider failures redact response body and do not retry',async()=>{let calls=0;const fake=(async()=>{calls++;return new Response('SECRET BODY',{status:401});}) as typeof fetch;await assert.rejects(()=>providerJson('https://example.invalid',{},'Test',fake),e=>e instanceof Error&&!e.message.includes('SECRET')&&e.message.includes('401'));assert.equal(calls,1);});
 test('planner extracts supported interactions response forms',()=>{assert.equal(extractPlannerText({status:'completed',outputs:[{type:'text',text:'{}'}]}),'{}');assert.equal(extractPlannerText({status:'completed',steps:[{type:'model_output',content:[{type:'text',text:'{}'}]}]}),'{}');assert.throws(()=>extractPlannerText({status:'failed'}));});
 test('mocked planner is stateless and application owns identity',async()=>{process.env.GEMINI_API_KEY='test-placeholder';let body:any;const p=plan();const fake=(async(_url,init)=>{body=JSON.parse(init!.body as string);return Response.json({status:'completed',output_text:JSON.stringify({learningObjective:p.learningObjective,warnings:[],scenes:p.scenes})});}) as typeof fetch;const result=await planLive('water','notes','server-owned','indian-english-female',undefined,undefined,fake);assert.equal(result.ownerId,'local');assert.equal(result.versionId,'server-owned');assert.equal(body.store,false);assert.equal(body.background,false);delete process.env.GEMINI_API_KEY;});

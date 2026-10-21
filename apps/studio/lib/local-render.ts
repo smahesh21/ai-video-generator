@@ -26,11 +26,14 @@ export function localRequest(request:Request,mutation=false){
 export async function jsonFile(file:string){return JSON.parse(await fs.readFile(file,"utf8")) as Record<string,unknown>;}
 async function writeJson(file:string,value:unknown){await fs.writeFile(file,JSON.stringify(value,null,2),"utf8");}
 async function launch(id:string,mode:"start"|"retry"){
- await new Promise<void>((resolve,reject)=>{
-  const worker=spawn(process.execPath,["--require",path.join(root,"src","windows-hide-processes.cjs"),"--import","tsx",path.join(root,"src","studio-worker.ts"),id,mode],{cwd:root,detached:true,stdio:"ignore",windowsHide:true});
-  worker.once("spawn",()=>{worker.unref();resolve();});
-  worker.once("error",reject);
- });
+ const log=await fs.open(path.join(jobDir(id),"worker.log"),"a");
+ try{
+  await new Promise<void>((resolve,reject)=>{
+   const worker=spawn(process.execPath,["--require",path.join(root,"src","windows-hide-processes.cjs"),"--import","tsx",path.join(root,"src","studio-worker.ts"),id,mode],{cwd:root,detached:true,stdio:["ignore",log.fd,log.fd],windowsHide:true});
+   worker.once("spawn",()=>{worker.unref();resolve();});
+   worker.once("error",reject);
+  });
+ }finally{await log.close();}
 }
 export async function startJob(input:unknown,ownerId?:string,onPrepared?:(job:{id:string;projectId:string;storyboardVersion:number;created:string})=>Promise<void>){
  const snapshot=validateStudioSnapshot(input);
@@ -50,7 +53,21 @@ export async function readJob(id:string){
  const dir=jobDir(id);
  const job=await jsonFile(path.join(dir,"studio-job.json"));
  const manifest=await jsonFile(path.join(dir,"manifest.json")).catch(()=>null);
- return {id,projectId:job.projectId,storyboardVersion:job.storyboardVersion,state:job.state,stage:manifest?.stage??(job.state==="queued"?"queued":"planning"),error:job.error??null,retryable:job.retryable===true,updated:job.updated,outputReady:job.state==="ready"&&manifest?.state==="ready-for-review"};
+ const state=manifest?.state==="cancelled"?"cancelled":job.state;
+ const active=state==="queued"||state==="running";
+ const cancelRequested=active&&await fs.access(path.join(dir,"cancel.request")).then(()=>true,()=>false);
+ return {id,projectId:job.projectId,storyboardVersion:job.storyboardVersion,state,stage:manifest?.stage??(state==="queued"?"queued":"planning"),error:state==="cancelled"?null:job.error??null,retryable:state==="cancelled"?false:job.retryable===true,cancelRequested,updated:job.updated,outputReady:state==="ready"&&manifest?.state==="ready-for-review"};
+}
+export async function cancelJob(id:string){
+ const job=await readJob(id);
+ if(job.cancelRequested)return {id,cancelRequested:true};
+ if(job.state!=="queued"&&job.state!=="running")throw Error("Only a queued or running render can be cancelled.");
+ const handle=await fs.open(path.join(jobDir(id),"cancel.request"),"wx").catch(async error=>{
+  if((error as NodeJS.ErrnoException).code==="EEXIST")return null;
+  throw error;
+ });
+ if(handle){await handle.writeFile(new Date().toISOString());await handle.close();}
+ return {id,cancelRequested:true};
 }
 export async function retryJob(id:string){
  const job=await readJob(id);
