@@ -33,3 +33,14 @@ test('account render state survives loss of local job files and stale workers st
  const localOnly=await accountJobStatus({...record,state:'ready' as const,cancelRequested:false});
  assert.equal(localOnly.state,'missing');
 });
+
+test('queued account renders keep their saved state until a worker claims them',()=>{
+ const base={id:'studio_'+'d'.repeat(24),ownerId:'owner',projectId:'project',storyboardVersion:1,created:'2026-10-21T00:00:00.000Z',updated:'2026-10-21T00:00:00.000Z',execution:'queue' as const};
+ const queued=durableActiveJob({...base,state:'queued' as const},Date.parse('2026-10-22T00:00:00.000Z'));
+ assert.equal(queued?.state,'queued');
+ const failed=durableActiveJob({...base,state:'failed' as const,error:'Render failed',retryable:true});
+ assert.equal(failed?.state,'failed');
+ assert.equal(failed?.retryable,true);
+ const expired=durableActiveJob({...base,state:'running' as const,leaseUntil:'2026-10-21T00:01:00.000Z'},Date.parse('2026-10-21T00:01:01.000Z'));
+ assert.equal(expired?.state,'interrupted');
+});

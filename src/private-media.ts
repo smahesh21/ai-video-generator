@@ -1,6 +1,6 @@
 import {createReadStream, promises as fs} from 'node:fs';
 import path from 'node:path';
-import {GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client} from '@aws-sdk/client-s3';
+import {DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client} from '@aws-sdk/client-s3';
 
 type MediaKind='video'|'poster';
 const names:Record<MediaKind,string>={video:'output.mp4',poster:'poster.png'};
@@ -16,6 +16,7 @@ function settings(){
  if(!/^[a-f0-9]{32}$/i.test(accountId)||!/^[a-z0-9][a-z0-9-]*$/.test(bucket))throw Error('Invalid private media storage configuration.');
  return {accountId,bucket,accessKeyId,secretAccessKey};
 }
+export function privateMediaConfigured(){return settings()!==null;}
 
 function client(config:NonNullable<ReturnType<typeof settings>>){
  return new S3Client({region:'auto',endpoint:`https://${config.accountId}.r2.cloudflarestorage.com`,credentials:{accessKeyId:config.accessKeyId,secretAccessKey:config.secretAccessKey},requestChecksumCalculation:'WHEN_REQUIRED',responseChecksumValidation:'WHEN_REQUIRED',maxAttempts:2});
@@ -39,6 +40,14 @@ export async function uploadRenderMedia(id:string,dir:string){
   }
   return true;
  }finally{s3.destroy();}
+}
+
+export async function removeRenderMedia(id:string){
+ const config=settings();
+ if(!config)return;
+ const s3=client(config);
+ try{for(const kind of ['video','poster'] as const)await s3.send(new DeleteObjectCommand({Bucket:config.bucket,Key:mediaKey(id,kind)}));}
+ finally{s3.destroy();}
 }
 
 export async function privateMediaSize(id:string,kind:MediaKind){

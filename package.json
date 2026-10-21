@@ -13,6 +13,7 @@
     "test:integration": "tsx --test tests/integration.test.ts",
     "review": "tsx src/review-server.ts",
     "dev": "npm --prefix apps/studio run dev",
+    "worker:account": "tsx src/account-queue-worker.ts",
     "build:studio": "npm --prefix apps/studio run build",
     "typecheck:studio": "npm --prefix apps/studio run typecheck"
   },

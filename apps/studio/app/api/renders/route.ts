@@ -3,7 +3,7 @@ import {accountMode} from "../../../lib/account-mode";
 import {accountSnapshot,sameOriginMutation} from "../../../lib/account-render";
 import {accountIdentity} from "../../../lib/account-access";
 import {readAccountProjects} from "../../../lib/account-projects";
-import {accountJobHistory,recordAccountJob} from "../../../lib/account-jobs";
+import {accountJobHistory,enqueueAccountJob} from "../../../lib/account-jobs";
 export const runtime="nodejs";
 export async function GET(request:Request){
  if(!accountMode)return Response.json({error:"Account render history is not enabled."},{status:404});
@@ -25,7 +25,7 @@ export async function POST(request:Request){
   if(accountMode){
    const checked=await accountSnapshot(request,input);
    if(checked.status!==200)return Response.json({error:checked.error},{status:checked.status});
-   const job=await startJob(checked.snapshot,checked.identity.id,prepared=>recordAccountJob(checked.identity.id,{...prepared,snapshot:checked.snapshot}));
+   const job=await enqueueAccountJob(checked.identity.id,checked.snapshot);
    return Response.json(job,{status:202,headers:{"Cache-Control":"private, no-store"}});
   }
   const job=await startJob(input);
