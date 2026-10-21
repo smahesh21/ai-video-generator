@@ -10,4 +10,4 @@ export async function proxy(request:NextRequest){
  signIn.searchParams.set("next",request.nextUrl.pathname);
  return NextResponse.redirect(signIn);
 }
-export const config={matcher:["/projects/:path*"]};
+export const config={matcher:["/projects/:path*","/account/:path*"]};

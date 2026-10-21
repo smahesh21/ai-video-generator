@@ -1,6 +1,6 @@
 # drishvo.co.in — development status
 
-Last updated: 20 October 2026
+Last updated: 21 October 2026
 Current stage: Internal account mode with MongoDB-backed projects and owner-checked local fixture renders.
 
 This is the ongoing checkpoint for feature work. Update it when a feature starts, changes scope, or is completed. `PROTOTYPE_STATUS.md` remains the detailed record of the earlier command-line video pipeline validation.
@@ -31,12 +31,13 @@ This is the ongoing checkpoint for feature work. Update it when a feature starts
 | Creator flow | Instagram connection and reconnect preview | Complete (local) | Publish review links to an account-status screen with connection-needed and reconnect examples, a readiness checklist, and return to the saved draft. OAuth actions are disabled. Studio build and browser walkthrough passed. |
 | Creator flow | Instagram publishing and scheduling UI | Planned | Add real account authorization, final confirmation, scheduling, and delivery/recovery states when integrations are available. No live posting exists. |
 | Platform | Accounts, durable project storage, and background jobs | In progress | Account mode is enabled locally. Better Auth sign-in uses an approved-email list and public signup is disabled. Owner-scoped MongoDB project read/save passed live checks against the `aivideogenerator` database. Fixture render creation checks the account's saved approved snapshot, and job status, retries, video, and poster URLs check the owning account. Jobs and media remain on this laptop; durable workers and private cloud media remain. |
+| Platform | Signed-in password change | Complete (local) | Private Account screen requires the current password, validates a 12–128-character replacement, and revokes other sessions. An isolated MongoDB account test confirmed old-password rejection and new-password sign-in; the temporary test database was removed. Email-based forgotten-password recovery is not yet configured. |
 | Social | Instagram connection, direct publish, and scheduling | Planned | Requires Meta integration and eligibility/error handling; no connection or posting is implemented. |
 | Commercial | Subscription and billing | Later | Intentionally deferred by product decision. |
 
 ## Next development sequence
 
-1. Design a reviewed migration of prior local drafts, add account password change/recovery, then move render jobs and media to durable workers and private storage.
+1. Move render jobs and media to durable workers and private storage, then add email-based account recovery and production session/backup policy. Older local drafts remain separate by product decision.
 2. Validate live Gemini planning and ElevenLabs narration with real credentials, then assess factual quality, timing, pronunciation, caption sync, and video quality before enabling live generation.
 3. Implement Instagram authorization, direct publishing, scheduling, and delivery/recovery states after the generation workflow is reliable.
 4. Add operations and cost controls; keep subscriptions and billing for the later version.
@@ -44,9 +45,10 @@ This is the ongoing checkpoint for feature work. Update it when a feature starts
 ## Current limitations
 
 - The studio now launches the command-line pipeline in fixture mode through a local worker. Its separate generation-state screen is still a UI simulation; the real job is on the Video render screen. The local worker and filesystem are not production infrastructure.
-- Account mode is configured locally with MongoDB and one approved internal user. Previous browser drafts remain in local-mode storage and are not imported automatically. Switching modes changes which workspace appears; review any migration before moving drafts. Explicit project deletion removes its approval history.
+- Account mode is configured locally with MongoDB and one approved internal user. Previous browser drafts remain in local-mode storage and are intentionally not imported into accounts. Switching modes changes which workspace appears. Explicit project deletion removes its approval history.
 - The studio storyboard and video concept are illustrative. AI brainstorming, AI script/storyboard generation, and live voiceover are not yet available through the UI. The new render output is a silent test MP4 with simplified supported graphics.
 - Fixture MP4s have silent synthetic narration timing and topic-matched schematic animation for the supported motifs. They are real files, but they do not yet deliver custom AI-generated visual assets, ElevenLabs voice quality, or voice-to-motion synchronization described in the product goal. Local illustrative storyboards may still contain generic educational copy.
+- The ignored `.env.first-login` file contains the original provisioned password only; it may no longer work if the password has since changed. Signed-in users can change their password under Account. Forgotten-password email recovery is not yet available.
 - Publish review can save a caption in the current workspace and show Instagram account-status examples, but no Instagram authorization, posting, scheduling, durable job/media storage, or billing is live.
 
 ## How to maintain this file
@@ -57,6 +59,7 @@ For each feature, update its tracker row and the **Last updated** date. When wor
 
 | Date | Change | Validation |
 | --- | --- | --- |
+| 21 Oct 2026 | Kept older local drafts separate by product decision, removed the unfinished import UI, fixed same-origin browser saves, and added a private Account page for signed-in password changes. | Root and studio typechecks, 33 tests, and account-mode studio build passed. Signed-out Account redirect passed. Isolated MongoDB test confirmed wrong-current-password rejection, password change, old-password rejection, new-password sign-in, other-session revocation, replacement-session access, and test database cleanup. The existing account's original bootstrap password did not sign in during browser verification, so its authenticated UI flow was not exercised. |
 | 20 Oct 2026 | Configured the existing MongoDB URI in ignored local settings for database `aivideogenerator`, approved and provisioned the first internal account, enabled account mode, added owner checks to fixture render jobs and media, and fixed browser sign-in navigation. Generated initial login details remain in an ignored local file; earlier local drafts are not auto-imported. | Live MongoDB ping, account sign-in, owner-scoped project save/read, browser sign-in to Projects, and HTTP media access passed (owner 200, signed-out 401, other owner 404; range 206). Root and studio typechecks, 33 tests, and account-mode build passed. Full account-mode MP4 rendering still needs a user flow check. |
 | 20 Oct 2026 | Began internal account mode: added credential-free env template and ignored local settings, Better Auth email/password sign-in and approved-email gate, owner-scoped MongoDB project snapshots, protected project pages, and account-mode render fail-closed behavior. Local mode remains active. | `npm run typecheck`, `npm run typecheck:studio`, `npm test` (33 passing), and local/account-mode studio builds passed. Disposable account-mode HTTP checks: sign-in 200, Projects redirect, project API 401, local render/media 503. Live MongoDB/sign-in validation pending configuration. |
 | 20 Oct 2026 | Added per-project approved storyboard history with restore into a new draft and server-side rejection of approval mutation/removal on ordinary saves. Account storage remains the next platform step. | `npm run typecheck`, `npm run typecheck:studio`, `npm test` (33 passing), and `npm run build:studio` passed. |

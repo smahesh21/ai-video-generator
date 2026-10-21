@@ -91,5 +91,5 @@ async function accountPut(request:Request){
 function sameOriginMutation(request:Request){
  const origin=request.headers.get("origin");
  if(!origin)return false;
- try{return new URL(origin).origin===new URL(request.url).origin;}catch{return false;}
+ try{const browser=new URL(origin);const host=request.headers.get("host")??new URL(request.url).host;return ["http:","https:"].includes(browser.protocol)&&browser.host===host;}catch{return false;}
 }

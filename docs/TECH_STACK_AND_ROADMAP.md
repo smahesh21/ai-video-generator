@@ -11,7 +11,7 @@ The creator-facing flow remains four steps: **Idea → Storyboard → Video → 
 | Part | Current technology | What it does |
 | --- | --- | --- |
 | Studio | Next.js 16, React 19, TypeScript, CSS | Four-step browser application and local API routes. |
-| Project state | Better Auth + MongoDB in account mode; local Next.js API + `.cache/studio-projects/` files in local mode | Account projects and approval history are owner-scoped. The earlier local browser workspace remains separate until a reviewed import exists. |
+| Project state | Better Auth + MongoDB in account mode; local Next.js API + `.cache/studio-projects/` files in local mode | Account projects and approval history are owner-scoped. The earlier local browser workspace intentionally remains separate. |
 | Render jobs | Node.js child process and local `runs/` files | Runs the existing pipeline after checking the saved approved storyboard. Account-mode job and media routes verify the owner. This is for localhost development, not a production queue or durable media store. |
 | Video engine | Remotion, FFmpeg/FFprobe, TypeScript, Zod | Builds 1080 × 1920 MP4s, captions, motion cues, and review artifacts; validates inputs and output. |
 | Fixture mode | Synthetic narration timing and silent audio | Tests end-to-end rendering without API keys or provider charges. It cannot establish real voice-to-motion quality. |
@@ -25,7 +25,7 @@ These are design choices recorded in the project documentation, not deployed int
 
 | Need | Proposed choice | Decision to validate |
 | --- | --- | --- |
-| Sign-in and creator ownership | Better Auth | Internal account mode is implemented locally; production session policy, account recovery, and multi-user operations remain. |
+| Sign-in and creator ownership | Better Auth | Internal account mode is implemented locally; signed-in password change is available; email recovery, production session policy, and multi-user operations remain. |
 | Projects, versions, approvals, jobs, publish records | MongoDB Atlas | Project snapshots are stored in MongoDB locally; durable job/publish records, transactions, retention, and backups remain. |
 | Original and rendered media | Cloudflare R2 | Private storage, signed access, upload limits, lifecycle, and costs. |
 | Durable background orchestration | Inngest or an equivalent durable job service | Long renders, retries, cancellation, progress, and worker hosting. Do not execute long video jobs inside a short request handler. |
@@ -38,7 +38,7 @@ No subscription or billing service is needed in this phase.
 ## Recommended build sequence
 
 1. **Finish the local render bridge.** Verify a browser-created MP4 plays and downloads, failure/retry states reflect real jobs, and the UI states clearly that fixture audio is silent. This proves the workflow and renderer are connected before introducing external services.
-2. **Complete account operations.** Owner-scoped projects and approvals are implemented locally. Add reviewed import of prior local drafts, account password change/recovery, and production session/backup policy.
+2. **Complete account operations.** Owner-scoped projects and approvals are implemented locally. Keep prior local drafts separate; add email-based account recovery and production session/backup policy.
 3. **Move rendering to durable workers and private storage.** Keep the same approval-to-job contract, but replace local child processes and files with a queue/workflow, worker capacity limits, media storage, and recoverable progress. Add cancellation and idempotency.
 4. **Connect live AI creation.** Generate storyboard proposals from ideas with Gemini, require creator approval, then use ElevenLabs timestamps to align captions and motion. Run quality checks for factual accuracy, pronunciation, readability, timing, and rendering. Preserve the no-key fixture path for testing.
 5. **Complete publish and schedule.** Connect an eligible Instagram account, confirm the final video/caption, submit media, track delivery or uncertainty, and support scheduled publishing and reconnect handling.

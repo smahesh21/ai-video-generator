@@ -11,7 +11,7 @@ export const auth=config?betterAuth({
  baseURL:config.baseURL,
  secret:config.secret,
  database:mongodbAdapter(mongoDb(),{client:mongoClient()}),
- emailAndPassword:{enabled:true,disableSignUp:true},
+ emailAndPassword:{enabled:true,disableSignUp:true,minPasswordLength:12,maxPasswordLength:128},
  plugins:[admin()],
  databaseHooks:{
   user:{create:{before:async user=>{
