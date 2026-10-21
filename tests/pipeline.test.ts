@@ -10,6 +10,7 @@ import {approveRun,checkApproval,createRun,generate} from '../src/pipeline';
 import {runDir,withLock} from '../src/storage';
 import {extractPlannerText,planLive,providerJson,synthesize} from '../src/providers';
 import {studioPlan,validateStudioSnapshot,type StudioSnapshot} from '../src/studio-plan';
+import {workerInterrupted,WORKER_GRACE_MS} from '../src/worker-health';
 const plan=()=>fixturePlan('water','test-run');
 function artifacts(p=plan()):SpeechArtifact[]{return p.scenes.map(s=>({key:'test',file:'audio.wav',hash:'audiohash',duration:11.8,alignment:fixtureAlignment(speechInput(s).text,11.8),provider:'fixture',model:'fixture',voiceId:'fixture',fixture:true}));}
 test('all three topic fixtures validate',()=>{for(const topic of ['water','ram','binary'])assert.equal(fixturePlan(topic,'test').scenes.length,6);});
@@ -75,6 +76,17 @@ test('a cancellation request stops an approved fixture before rendering',async()
   assert.equal(manifest.state,'cancelled');
   await assert.rejects(()=>fs.access(path.join(dir,'output.mp4')));
  }finally{await fs.rm(dir,{recursive:true,force:true});}
+});
+test('worker recovery waits for a stale heartbeat and a stopped process',()=>{
+ const now=Date.parse('2026-10-21T10:00:00.000Z');
+ const old=new Date(now-WORKER_GRACE_MS-1000).toISOString();
+ const recent=new Date(now-1000).toISOString();
+ const running={state:'running',updated:old};
+ assert.equal(workerInterrupted(running,{pid:123,at:recent},now,()=>false),false);
+ assert.equal(workerInterrupted(running,{pid:123,at:old},now,()=>true),false);
+ assert.equal(workerInterrupted(running,{pid:123,at:old},now,()=>false),true);
+ assert.equal(workerInterrupted({state:'queued',updated:old},null,now,()=>false),true);
+ assert.equal(workerInterrupted({state:'ready',updated:old},{pid:123,at:old},now,()=>false),false);
 });
 test('provider failures redact response body and do not retry',async()=>{let calls=0;const fake=(async()=>{calls++;return new Response('SECRET BODY',{status:401});}) as typeof fetch;await assert.rejects(()=>providerJson('https://example.invalid',{},'Test',fake),e=>e instanceof Error&&!e.message.includes('SECRET')&&e.message.includes('401'));assert.equal(calls,1);});
 test('planner extracts supported interactions response forms',()=>{assert.equal(extractPlannerText({status:'completed',outputs:[{type:'text',text:'{}'}]}),'{}');assert.equal(extractPlannerText({status:'completed',steps:[{type:'model_output',content:[{type:'text',text:'{}'}]}]}),'{}');assert.throws(()=>extractPlannerText({status:'failed'}));});

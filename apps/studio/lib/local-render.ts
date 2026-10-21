@@ -3,6 +3,7 @@ import path from "node:path";
 import {randomUUID} from "node:crypto";
 import {spawn} from "node:child_process";
 import {studioPlan,validateStudioSnapshot} from "../../../src/studio-plan";
+import {workerInterrupted} from "../../../src/worker-health";
 
 export const root=path.resolve(process.cwd(),"..","..");
 const idPattern=/^studio_[a-f0-9]{24}$/;
@@ -53,10 +54,15 @@ export async function readJob(id:string){
  const dir=jobDir(id);
  const job=await jsonFile(path.join(dir,"studio-job.json"));
  const manifest=await jsonFile(path.join(dir,"manifest.json")).catch(()=>null);
- const state=manifest?.state==="cancelled"?"cancelled":job.state;
+ const heartbeatFile=await jsonFile(path.join(dir,"studio-heartbeat.json")).catch(()=>null);
+ const heartbeat=typeof heartbeatFile?.pid==="number"&&typeof heartbeatFile.at==="string"?heartbeatFile:null;
+ // Older workers have a writer PID but no heartbeat file.
+ const legacyLock=heartbeat?null:await jsonFile(path.join(dir,"writer.lock")).catch(()=>null);
+ const health=heartbeat??(legacyLock?{pid:legacyLock.pid,at:job.updated}:null);
+ const state=manifest?.state==="cancelled"?"cancelled":workerInterrupted(job,health)?"interrupted":job.state;
  const active=state==="queued"||state==="running";
  const cancelRequested=active&&await fs.access(path.join(dir,"cancel.request")).then(()=>true,()=>false);
- return {id,projectId:job.projectId,storyboardVersion:job.storyboardVersion,state,stage:manifest?.stage??(state==="queued"?"queued":"planning"),error:state==="cancelled"?null:job.error??null,retryable:state==="cancelled"?false:job.retryable===true,cancelRequested,updated:job.updated,outputReady:state==="ready"&&manifest?.state==="ready-for-review"};
+ return {id,projectId:job.projectId,storyboardVersion:job.storyboardVersion,state,stage:manifest?.stage??(state==="queued"?"queued":"planning"),error:state==="cancelled"?null:state==="interrupted"?"The local render worker stopped. Start a fresh render from this approved storyboard.":job.error??null,retryable:state==="cancelled"||state==="interrupted"?false:job.retryable===true,cancelRequested,updated:job.updated,outputReady:state==="ready"&&manifest?.state==="ready-for-review"};
 }
 export async function cancelJob(id:string){
  const job=await readJob(id);

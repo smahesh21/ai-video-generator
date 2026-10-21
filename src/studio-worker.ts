@@ -9,8 +9,18 @@ if(!id)throw Error('Missing render ID');
 const dir=runDir(id),jobPath=path.join(dir,'studio-job.json');
 async function main(){
  const job=await readJson<{ownerId?:string;projectId:string;storyboardVersion:number;state:string;created:string}>(jobPath);
- await writeJson(jobPath,{...job,state:'running',updated:new Date().toISOString(),error:null});
+ const heartbeatPath=path.join(dir,'studio-heartbeat.json');
+ let heartbeatWrite:Promise<void>|null=null;
+ const beat=()=>{
+  if(heartbeatWrite)return heartbeatWrite;
+  heartbeatWrite=writeJson(heartbeatPath,{pid:process.pid,at:new Date().toISOString()}).finally(()=>{heartbeatWrite=null;});
+  return heartbeatWrite;
+ };
+ await beat();
+ const timer=setInterval(()=>{void beat().catch(error=>console.error('Worker heartbeat failed:',error));},5000);
+ timer.unref();
  try{
+  await writeJson(jobPath,{...job,state:'running',updated:new Date().toISOString(),error:null});
   if(mode==='start'){
    const input=await readJson(path.join(dir,'studio-request.json'));
    const plan=studioPlan(input,id,job.ownerId);
@@ -28,6 +38,7 @@ async function main(){
   await writeJson(jobPath,{...job,state:cancelled?'cancelled':'failed',updated:new Date().toISOString(),error:cancelled?null:message,retryable});
   process.exitCode=1;
  }finally{
+  clearInterval(timer);
   if(mode==='retry')await fs.unlink(path.join(dir,'studio-retry.lock')).catch(()=>{});
  }
 }
