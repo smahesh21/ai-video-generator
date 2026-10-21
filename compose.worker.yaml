@@ -1,0 +1,18 @@
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    image: drishvo-worker:local
+    init: true
+    restart: unless-stopped
+    env_file:
+      - ${DRISHVO_WORKER_ENV_FILE:?Set DRISHVO_WORKER_ENV_FILE to an absolute path outside the repository}
+    environment:
+      DRISHVO_AUTH_MODE: accounts
+      WORKER_HEALTH_PORT: "8080"
+    ports:
+      - "127.0.0.1:8080:8080"
+    mem_limit: 3g
+    cpus: 2
+    stop_grace_period: 90s

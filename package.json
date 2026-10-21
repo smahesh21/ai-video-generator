@@ -8,13 +8,14 @@
   },
   "scripts": {
     "pipeline": "tsx src/cli.ts",
-    "test": "tsx --test tests/pipeline.test.ts tests/studio-approvals.test.ts tests/private-media.test.ts tests/durable-renders.test.ts tests/account-worker-health.test.ts",
+    "test": "tsx --test tests/pipeline.test.ts tests/studio-approvals.test.ts tests/private-media.test.ts tests/durable-renders.test.ts tests/account-worker-health.test.ts tests/worker-operations.test.ts",
     "typecheck": "tsc --noEmit",
     "test:integration": "tsx --test tests/integration.test.ts",
     "test:queue-recovery": "tsx tests/queue-recovery.integration.ts",
     "review": "tsx src/review-server.ts",
     "dev": "npm --prefix apps/studio run dev",
     "worker:account": "tsx src/account-queue-worker.ts",
+    "worker:check": "tsx scripts/check-worker-operations.ts",
     "build:studio": "npm --prefix apps/studio run build",
     "typecheck:studio": "npm --prefix apps/studio run typecheck"
   },

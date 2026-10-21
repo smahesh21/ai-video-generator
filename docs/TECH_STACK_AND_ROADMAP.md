@@ -29,6 +29,14 @@ With `WORKER_HEALTH_PORT=8080`, `GET /health` returns 503 until MongoDB queue op
 
 On this Windows laptop, starting Docker Desktop directly from the Codex shell produced a Windows AF_UNIX socket access error, while launching Docker Desktop through Windows Explorer brought up the Linux engine. This matches the [reported Codex Desktop AppData virtualization issue](https://github.com/openai/codex/issues/52698). Do not reset Docker data to address this local launch path; start Docker Desktop from the Windows Start menu or Explorer, then verify `docker info` before building.
 
+### Host operation recipe
+
+`compose.worker.yaml` is a single-replica Linux host recipe with a three-gigabyte memory ceiling, two CPU limit, automatic restart, and a readiness port bound only to the host loopback address. Set `DRISHVO_WORKER_ENV_FILE` to an **absolute path outside the repository** containing the production worker's MongoDB and private R2 credentials, then use `docker compose -f compose.worker.yaml up -d --build`. Do not reuse `drishvo-develop` or the laptop's `aivideogenerator` database for production. The host needs free disk for temporary MP4 output and image layers; define a rendered-file cleanup policy before live use. Stopping the host during a render can interrupt that attempt; after lease expiry, the fixture queue makes one fresh attempt.
+
+Run `docker compose -f compose.worker.yaml run --rm --no-deps worker ./node_modules/.bin/tsx scripts/check-worker-operations.ts` for an aggregate operator check. It returns 0 when a worker is online with no queue older than ten minutes and fewer than three failed renders in the last day; 2 means an operational alert and 3 means the check failed. JSON output includes availability and counts, never account or job identifiers. A host scheduler can run it every minute and forward nonzero exits to an alert service. No external alert recipient is configured yet; an outside monitor is needed to detect a completely unreachable host. Production alert delivery and a hosted end-to-end render still need setup and validation.
+
+Docker Compose restarts the worker when its process exits. An unhealthy Docker health status alone does not restart it; the host still needs a supervisor or alert response for that condition.
+
 ## Proposed production services
 
 These are design choices recorded in the project documentation, not deployed integrations. Validate their account, pricing, licensing, and API requirements before committing to them.

@@ -10,6 +10,7 @@ COPY apps/studio/package.json apps/studio/package-lock.json ./apps/studio/
 RUN npm ci && npm --prefix apps/studio ci
 
 COPY src ./src
+COPY scripts/check-worker-operations.ts ./scripts/check-worker-operations.ts
 COPY apps/studio/lib ./apps/studio/lib
 COPY tsconfig.json ./
 RUN mkdir -p runs .cache node_modules/.cache && chown -R node:node runs .cache node_modules/.cache
