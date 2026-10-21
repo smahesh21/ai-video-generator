@@ -7,6 +7,7 @@ type Job={id:string;projectId:string;storyboardVersion:number;state:string;stage
 const stages=[{key:"plan",title:"Preparing approved scenes"},{key:"speech",title:"Creating silent timing tracks"},{key:"compile",title:"Syncing captions and motion"},{key:"render",title:"Rendering vertical video"},{key:"validate",title:"Checking the finished MP4"}];
 function RenderPanel({project,save,accountMode}:{project:Project;save:(project:Project)=>Promise<boolean>;accountMode:boolean}){
  const [jobId,setJobId]=useState(project.renderJob&&project.renderJob.storyboardVersion===project.storyboard?.version?project.renderJob.id:"");
+ const [pollRevision,setPollRevision]=useState(0);
  const [job,setJob]=useState<Job|null>(null);
  const [busy,setBusy]=useState(false);
  const [message,setMessage]=useState("");
@@ -29,10 +30,30 @@ function RenderPanel({project,save,accountMode}:{project:Project;save:(project:P
  useEffect(()=>{
   if(!jobId)return;
   let active=true;
-  async function refresh(){try{const response=await fetch(`/api/renders/${encodeURIComponent(jobId)}`,{cache:"no-store"});if(response.status===404){if(active){setMissing(true);setJob(null);setMessage("Saved render files are missing. Start a new local test render.");}return;}if(!response.ok)throw Error("Could not load render status.");const result=await response.json() as Job;if(active){if(result.projectId!==project.id||result.storyboardVersion!==approved.version)throw Error("This render belongs to another storyboard.");setMissing(false);setJob(result);setMessage("");}}catch(error){if(active)setMessage(error instanceof Error?error.message:"Could not load render status.");}}
-  void refresh();const timer=window.setInterval(()=>{void refresh();},2000);
-  return()=>{active=false;window.clearInterval(timer);};
- },[jobId,project.id,approved.version]);
+  let timer:number|undefined;
+  let controller:AbortController|undefined;
+  async function refresh(){
+   let keepPolling=true;
+   controller=new AbortController();
+   try{
+    const response=await fetch(`/api/renders/${encodeURIComponent(jobId)}`,{cache:"no-store",signal:controller.signal});
+    if(response.status===404){
+     keepPolling=false;
+     if(active){setMissing(true);setJob(null);setMessage("Saved render files are missing. Start a new local test render.");}
+     return;
+    }
+    if(!response.ok)throw Error("Could not load render status.");
+    const result=await response.json() as Job;
+    if(!active)return;
+    if(result.projectId!==project.id||result.storyboardVersion!==approved.version){keepPolling=false;throw Error("This render belongs to another storyboard.");}
+    setMissing(false);setJob(result);setMessage("");
+    keepPolling=result.state==="queued"||result.state==="running";
+   }catch(error){if(active)setMessage(error instanceof Error?error.message:"Could not load render status.");}
+   finally{if(active&&keepPolling)timer=window.setTimeout(()=>{void refresh();},2000);}
+  }
+  void refresh();
+  return()=>{active=false;window.clearTimeout(timer);controller?.abort();};
+ },[jobId,project.id,approved.version,pollRevision]);
  async function start(){
   setBusy(true);setMessage("");
   try{
@@ -48,7 +69,7 @@ function RenderPanel({project,save,accountMode}:{project:Project;save:(project:P
  }
  async function retry(){
   if(!jobId)return;setBusy(true);setMessage("");
-  try{const response=await fetch(`/api/renders/${encodeURIComponent(jobId)}/retry`,{method:"POST"});const result=await response.json() as {error?:string};if(!response.ok)throw Error(result.error||"Could not retry the render.");setJob(previous=>previous?{...previous,state:"queued",error:null}:previous);}
+  try{const response=await fetch(`/api/renders/${encodeURIComponent(jobId)}/retry`,{method:"POST"});const result=await response.json() as {error?:string};if(!response.ok)throw Error(result.error||"Could not retry the render.");setJob(previous=>previous?{...previous,state:"queued",error:null}:previous);setPollRevision(value=>value+1);}
   catch(error){setMessage(error instanceof Error?error.message:"Could not retry the render.");}
   finally{setBusy(false);}
  }
