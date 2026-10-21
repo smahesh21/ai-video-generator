@@ -3,6 +3,7 @@ import {accountIdentity} from "./account-access";
 import {readAccountProjects} from "./account-projects";
 import {jobDir,jsonFile,readJob} from "./local-render";
 import {validateStudioSnapshot} from "../../../src/studio-plan";
+import {accountJobRecord} from "./account-jobs";
 
 export function sameOriginMutation(request:Request){
  const origin=request.headers.get("origin");
@@ -29,6 +30,11 @@ export async function accountJob(request:Request,id:string){
  try{
   const metadata=await jsonFile(path.join(jobDir(id),"studio-job.json"));
   if(metadata.ownerId!==identity.id)return {status:404 as const,error:"Render not found."};
+  const saved=await readAccountProjects(identity.id);
+  if(!saved.projects?.some(project=>project.id===metadata.projectId))return {status:404 as const,error:"Render not found."};
+  // Older account-mode jobs predate the MongoDB history collection.
+  const record=await accountJobRecord(identity.id,id);
+  if(record&&record.projectId!==metadata.projectId)return {status:404 as const,error:"Render not found."};
   return {status:200 as const,job:await readJob(id)};
  }catch{return {status:404 as const,error:"Render not found."};}
 }

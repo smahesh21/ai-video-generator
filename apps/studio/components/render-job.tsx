@@ -3,15 +3,29 @@ import Link from "next/link";
 import {useEffect,useState} from "react";
 import {useStudio,type Project} from "./store";
 
-type Job={id:string;projectId:string;storyboardVersion:number;state:string;stage:string;error:string|null;retryable:boolean;outputReady:boolean;updated:string};
+type Job={id:string;projectId:string;storyboardVersion:number;state:string;stage:string;error:string|null;retryable:boolean;outputReady:boolean;updated:string;created?:string};
 const stages=[{key:"plan",title:"Preparing approved scenes"},{key:"speech",title:"Creating silent timing tracks"},{key:"compile",title:"Syncing captions and motion"},{key:"render",title:"Rendering vertical video"},{key:"validate",title:"Checking the finished MP4"}];
-function RenderPanel({project,save}:{project:Project;save:(project:Project)=>Promise<boolean>}){
+function RenderPanel({project,save,accountMode}:{project:Project;save:(project:Project)=>Promise<boolean>;accountMode:boolean}){
  const [jobId,setJobId]=useState(project.renderJob&&project.renderJob.storyboardVersion===project.storyboard?.version?project.renderJob.id:"");
  const [job,setJob]=useState<Job|null>(null);
  const [busy,setBusy]=useState(false);
  const [message,setMessage]=useState("");
  const [missing,setMissing]=useState(false);
+ const [history,setHistory]=useState<Job[]>([]);
+ const [historyError,setHistoryError]=useState("");
  const approved=project.storyboard!.approved!;
+ async function refreshHistory(){
+  if(!accountMode)return;
+  try{
+   const response=await fetch(`/api/renders?projectId=${encodeURIComponent(project.id)}`,{cache:"no-store"});
+   if(!response.ok)throw Error("Could not load saved render history.");
+   const result=await response.json() as {jobs:Job[]};
+   setHistory(result.jobs.filter(item=>item.storyboardVersion===approved.version));
+   setHistoryError("");
+  }catch(error){setHistoryError(error instanceof Error?error.message:"Could not load render history.");}
+ }
+ useEffect(()=>{void refreshHistory();},[accountMode,project.id,approved.version]);
+ useEffect(()=>{if(job?.state==="ready"||job?.state==="failed")void refreshHistory();},[job?.state]);
  useEffect(()=>{
   if(!jobId)return;
   let active=true;
@@ -28,6 +42,7 @@ function RenderPanel({project,save}:{project:Project;save:(project:Project)=>Pro
    if(!await save({...project,renderJob:{id:result.id,storyboardVersion:approved.version},updated:new Date().toISOString()}))setMessage(`Render started, but this workspace could not save its link. Job ID: ${result.id}`);
    setJob(null);
    setJobId(result.id);
+   void refreshHistory();
   }catch(error){setMessage(error instanceof Error?error.message:"Could not start the render.");}
   finally{setBusy(false);}
  }
@@ -48,14 +63,15 @@ function RenderPanel({project,save}:{project:Project;save:(project:Project)=>Pro
   <div className="render-layout"><section className="render-panel"><div className="render-heading"><span className="eyebrow">RENDER JOB</span><span className="render-state">{state.replaceAll("-"," ")}</span></div><h2>{job?.outputReady?"Your test video is ready.":job?.state==="failed"?"This render needs attention.":missing?"The saved render is unavailable.":jobId?"Your video is being prepared.":"Ready when you are."}</h2><p className="render-subcopy">{job?.outputReady?"Play or download the fixture MP4 below. Narration is intentionally silent.":job?.state==="failed"?job.error||"The render stopped. Your approved storyboard is unchanged.":missing?"The saved job cannot be found on this device. Your approved storyboard is safe; you can start a new local render.":jobId?"This job keeps running if you leave the page. You can return to it from the Video step.":"Starting a render creates local files on this laptop. It can take several minutes."}</p>{(!jobId||missing)?<button className="primary" onClick={start} disabled={busy}>{busy?"Starting…":missing?"Start a new local render →":"Render silent test video →"}</button>:null}{job?.state==="failed"&&job.retryable?<button className="primary" onClick={retry} disabled={busy}>{busy?"Retrying…":"Retry this render →"}</button>:null}{job?.state==="failed"&&!job.retryable?<Link className="button" href={`/projects/${encodeURIComponent(project.id)}/storyboard`}>Review storyboard →</Link>:null}<p className="form-message" role="status">{message}</p>{jobId?<div className="render-job-id">Local job: {jobId}</div>:null}
   {job?.outputReady?<div className="render-output"><video controls preload="metadata" playsInline poster={`/api/renders/${encodeURIComponent(jobId)}/poster`} src={videoUrl} aria-label="Rendered silent test video"/><a className="button primary" href={`${videoUrl}?download=1`} download>Download MP4 ↓</a><button type="button" onClick={start} disabled={busy}>{busy?"Starting…":"Render this storyboard again ↻"}</button><Link className="button" href={`/projects/${encodeURIComponent(project.id)}/publish`}>Prepare publish draft →</Link><span>Silent fixture · schematic motion graphics · synthetic timing · not publish-ready</span></div>:null}</section>
   <aside className="render-panel"><span className="eyebrow">PRODUCTION STAGES</span><h2>Where the job stands</h2><ol className="render-stages">{stages.map((step,i)=><li key={step.key} className={index>i||job?.outputReady?"done":index===i&&job?.state==="running"?"active":""}><span>{index>i||job?.outputReady?"✓":String(i+1).padStart(2,"0")}</span><div><strong>{step.title}</strong><small>{index>i||job?.outputReady?"Completed":index===i&&job?.state==="running"?"In progress":"Waiting"}</small></div></li>)}</ol><p className="render-subcopy">Progress is reported from actual pipeline checkpoints. Rendering percentage and time remaining are not estimated.</p></aside></div>
+  {accountMode?<section className="render-panel render-history"><span className="eyebrow">SAVED RENDERS</span><h2>Earlier renders of this storyboard</h2><p className="render-subcopy">Up to 20 recent jobs are listed for this approved version. The MP4 files are still stored on this laptop.</p>{historyError?<p className="form-message" role="alert">{historyError}</p>:null}{history.length?<ul>{history.map(item=><li key={item.id}><div><strong>{item.outputReady?"Ready":item.state==="missing"?"Files unavailable":item.state.replaceAll("-"," ")}</strong><small>{item.created?new Date(item.created).toLocaleString():"Saved render"} · {item.id}</small></div><button type="button" disabled={item.id===jobId||item.state==="missing"} onClick={()=>{setJob(null);setMissing(false);setMessage("");setJobId(item.id);}}>{item.id===jobId?"Viewing":"Open render"}</button></li>)}</ul>:<p className="render-subcopy">No saved renders for this storyboard yet.</p>}</section>:null}
  </>;
 }
 export function RenderJob({id}:{id:string}){
- const {projects,ready,save}=useStudio();
+ const {projects,ready,save,accountMode}=useStudio();
  if(!ready)return <div className="skeleton" role="status">Opening render workspace…</div>;
  const project=projects.find(item=>item.id===id);
  if(!project)return <div className="empty-state"><h1>This project isn’t available.</h1><p>It may have been deleted or saved in another browser.</p><Link className="button" href="/projects">Return to projects</Link></div>;
  const approved=project.storyboard?.approved;
  if(!approved||approved.version!==project.storyboard?.version)return <div className="empty-state"><div className="eyebrow">03 / VIDEO</div><h1>Approve the current storyboard first.</h1><p>The render uses an exact approved snapshot. Review your latest changes before starting a job.</p><Link className="button primary" href={`/projects/${encodeURIComponent(id)}/storyboard`}>Review storyboard →</Link></div>;
- return <RenderPanel key={`${id}:${approved.version}`} project={project} save={save}/>;
+ return <RenderPanel key={`${id}:${approved.version}`} project={project} save={save} accountMode={accountMode}/>;
 }

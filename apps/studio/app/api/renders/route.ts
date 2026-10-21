@@ -1,7 +1,20 @@
 import {localRequest,startJob} from "../../../lib/local-render";
 import {accountMode} from "../../../lib/account-mode";
 import {accountSnapshot,sameOriginMutation} from "../../../lib/account-render";
+import {accountIdentity} from "../../../lib/account-access";
+import {readAccountProjects} from "../../../lib/account-projects";
+import {accountJobHistory,recordAccountJob} from "../../../lib/account-jobs";
 export const runtime="nodejs";
+export async function GET(request:Request){
+ if(!accountMode)return Response.json({error:"Account render history is not enabled."},{status:404});
+ const identity=await accountIdentity(request);
+ if(!identity)return Response.json({error:"Sign in to view renders."},{status:401});
+ const projectId=new URL(request.url).searchParams.get("projectId")??"";
+ if(!/^[a-zA-Z0-9_-]{1,100}$/.test(projectId))return Response.json({error:"Invalid project ID."},{status:400});
+ const saved=await readAccountProjects(identity.id);
+ if(!saved.projects?.some(project=>project.id===projectId))return Response.json({error:"Project not found."},{status:404});
+ return Response.json({jobs:await accountJobHistory(identity.id,projectId)},{headers:{"Cache-Control":"private, no-store"}});
+}
 export async function POST(request:Request){
  if(accountMode?!sameOriginMutation(request):!localRequest(request,true))return Response.json({error:"This request must come from the studio."},{status:403});
  if(!request.headers.get("content-type")?.startsWith("application/json"))return Response.json({error:"Expected JSON."},{status:415});
@@ -12,7 +25,7 @@ export async function POST(request:Request){
   if(accountMode){
    const checked=await accountSnapshot(request,input);
    if(checked.status!==200)return Response.json({error:checked.error},{status:checked.status});
-   const job=await startJob(checked.snapshot,checked.identity.id);
+   const job=await startJob(checked.snapshot,checked.identity.id,prepared=>recordAccountJob(checked.identity.id,prepared));
    return Response.json(job,{status:202,headers:{"Cache-Control":"private, no-store"}});
   }
   const job=await startJob(input);
