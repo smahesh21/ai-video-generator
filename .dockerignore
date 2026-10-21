@@ -1,0 +1,13 @@
+.git
+.cache
+runs
+node_modules
+**/node_modules
+**/.next
+.env
+.env.*
+**/.env
+**/.env.*
+*.log
+test-results
+playwright-report

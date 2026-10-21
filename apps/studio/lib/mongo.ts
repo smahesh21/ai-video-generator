@@ -1,11 +1,11 @@
 import {MongoClient} from "mongodb";
-import {requireAccountConfig} from "./account-mode";
+import {requireMongoConfig} from "./account-mode";
 
 const globalMongo=globalThis as typeof globalThis&{drishvoMongoClient?:MongoClient};
 export function mongoClient(){
- const config=requireAccountConfig();
+ const config=requireMongoConfig();
  return globalMongo.drishvoMongoClient??(globalMongo.drishvoMongoClient=new MongoClient(config.uri));
 }
 export function mongoDb(){
- return mongoClient().db(requireAccountConfig().dbName);
+ return mongoClient().db(requireMongoConfig().dbName);
 }
