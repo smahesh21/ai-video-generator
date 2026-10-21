@@ -3,9 +3,10 @@ import {readJob} from "./local-render";
 import type {StudioSnapshot} from "../../../src/studio-plan";
 import {studioPlan} from "../../../src/studio-plan";
 import {randomUUID} from "node:crypto";
+import {createHash} from "node:crypto";
 
 type ActiveState="queued"|"running"|"ready"|"failed"|"cancelled"|"interrupted";
-type AccountRender={id:string;ownerId:string;projectId:string;storyboardVersion:number;created:string;readyAt?:string;mediaStorage?:"r2";snapshot?:StudioSnapshot;state?:ActiveState;stage?:string;updated?:string;error?:string|null;retryable?:boolean;cancelRequested?:boolean;execution?:"queue";workerId?:string;leaseUntil?:string};
+type AccountRender={id:string;ownerId:string;projectId:string;storyboardVersion:number;created:string;readyAt?:string;mediaStorage?:"r2";snapshot?:StudioSnapshot;state?:ActiveState;stage?:string;updated?:string;error?:string|null;retryable?:boolean;cancelRequested?:boolean;execution?:"queue";renderMode?:"fixture";workerId?:string;leaseUntil?:string;crashRetries?:number;parentJobId?:string;replacementId?:string;replacementReady?:boolean};
 const staleAfterMs=30_000;
 const leaseMs=60_000;
 let indexReady:Promise<unknown>|null=null;
@@ -21,7 +22,7 @@ export async function recordAccountJob(ownerId:string,job:Omit<AccountRender,"ow
 export async function enqueueAccountJob(ownerId:string,snapshot:StudioSnapshot){
  const created=new Date().toISOString(),id="studio_"+randomUUID().replaceAll("-","").slice(0,24);
  studioPlan(snapshot,id,ownerId);
- const job={id,projectId:snapshot.id,storyboardVersion:snapshot.storyboard.version,created,snapshot,execution:"queue" as const};
+ const job={id,projectId:snapshot.id,storyboardVersion:snapshot.storyboard.version,created,snapshot,execution:"queue" as const,renderMode:"fixture" as const};
  await recordAccountJob(ownerId,job);
  return {id,projectId:job.projectId,storyboardVersion:job.storyboardVersion};
 }
@@ -38,13 +39,32 @@ export async function heartbeatAccountJob(ownerId:string,id:string,workerId:stri
 export async function finishAccountJob(ownerId:string,id:string,workerId:string,state:"ready"|"failed"|"cancelled",details:{error?:string|null;retryable?:boolean;readyAt?:string}={}){
  const {records,ready}=collection();await ready;
  const now=new Date().toISOString();
- const result=await records.updateOne({ownerId,id,execution:"queue",state:"running",workerId,...(state==="ready"?{cancelRequested:{$ne:true}}:{})},{$set:{state,stage:state==="ready"?"complete":state,error:details.error??null,retryable:state==="failed"&&details.retryable===true,cancelRequested:false,updated:now,...(state==="ready"?{readyAt:details.readyAt??now,mediaStorage:"r2" as const}:{})},$unset:{workerId:"",leaseUntil:""}});
+ const result=await records.updateOne({ownerId,id,execution:"queue",state:"running",workerId,leaseUntil:{$gt:now},...(state==="ready"?{cancelRequested:{$ne:true}}:{})},{$set:{state,stage:state==="ready"?"complete":state,error:details.error??null,retryable:state==="failed"&&details.retryable===true,cancelRequested:false,updated:now,...(state==="ready"?{readyAt:details.readyAt??now,mediaStorage:"r2" as const}:{})},$unset:{workerId:"",leaseUntil:""}});
  if(result.matchedCount!==1)throw Error("Render worker no longer owns this job.");
+}
+function recoveredId(id:string){return "studio_"+createHash("sha256").update(id+":recovery:1").digest("hex").slice(0,24);}
+async function ensureRecoveryChild(item:AccountRender){
+ if(!item.replacementId||!item.snapshot)return;
+ const {records,ready}=collection();await ready;
+ const created=new Date().toISOString();
+ await records.updateOne({id:item.replacementId},{$setOnInsert:{id:item.replacementId,ownerId:item.ownerId,projectId:item.projectId,storyboardVersion:item.storyboardVersion,created,updated:created,snapshot:item.snapshot,execution:"queue",renderMode:"fixture",state:"queued",stage:"queued",cancelRequested:false,crashRetries:1,parentJobId:item.id}},{upsert:true});
+ const child=await records.findOne({id:item.replacementId});
+ if(child?.ownerId!==item.ownerId||child.parentJobId!==item.id)throw Error("Recovery job ID collision.");
+ await records.updateOne({ownerId:item.ownerId,id:item.id,execution:"queue",state:"interrupted",replacementId:item.replacementId},{$set:{replacementReady:true}});
 }
 export async function expireAccountJobs(){
  const {records,ready}=collection();await ready;
  const now=new Date().toISOString();
- await records.updateMany({execution:"queue",state:"running",leaseUntil:{$lt:now}},{$set:{state:"interrupted",stage:"unavailable",error:"The render worker stopped. Start a fresh render from the approved storyboard.",retryable:false,cancelRequested:false,updated:now},$unset:{workerId:"",leaseUntil:""}});
+ const expired=await records.find({execution:"queue",state:"running",leaseUntil:{$lt:now}}).limit(20).toArray();
+ for(const item of expired){
+  const cancelled=item.cancelRequested===true;
+  const recover=!cancelled&&item.renderMode==="fixture"&&!!item.snapshot&&(item.crashRetries??0)<1;
+  const replacementId=recover?recoveredId(item.id):undefined;
+  const result=await records.updateOne({id:item.id,execution:"queue",state:"running",leaseUntil:{$lt:now}},{$set:{state:cancelled?"cancelled":"interrupted",stage:cancelled?"cancelled":"unavailable",error:cancelled?null:"The render worker stopped before finishing.",retryable:false,cancelRequested:false,updated:now,...(replacementId?{replacementId,replacementReady:false}:{})},$unset:{workerId:"",leaseUntil:""}});
+  if(result.matchedCount&&replacementId)await ensureRecoveryChild({...item,replacementId});
+ }
+ const pending=await records.find({execution:"queue",state:"interrupted",replacementId:{$exists:true},replacementReady:{$ne:true}}).limit(20).toArray();
+ for(const item of pending)await ensureRecoveryChild(item);
 }
 export async function cancelQueuedAccountJob(ownerId:string,id:string){
  const {records,ready}=collection();await ready;
@@ -88,7 +108,7 @@ export function durableActiveJob(item:AccountRender,now=Date.now()){
  if(item.execution==="queue"){
   const interrupted=item.state==="interrupted"||(item.state==="running"&&!!item.leaseUntil&&Date.parse(item.leaseUntil)<now);
   const state=interrupted?"interrupted":item.state;
-  return {id:item.id,projectId:item.projectId,storyboardVersion:item.storyboardVersion,state,stage:interrupted?"unavailable":item.stage??state,error:interrupted?"The render worker stopped. Start a fresh render from this approved storyboard.":item.error??null,retryable:state==="failed"&&item.retryable===true,cancelRequested:active&&!interrupted&&item.cancelRequested===true,updated,outputReady:false,created:item.created};
+  return {id:item.id,projectId:item.projectId,storyboardVersion:item.storyboardVersion,state,stage:interrupted?"unavailable":item.stage??state,error:interrupted?"The render worker stopped. A new attempt is queued from the approved storyboard.":item.error??null,retryable:state==="failed"&&item.retryable===true,cancelRequested:active&&!interrupted&&item.cancelRequested===true,updated,outputReady:false,created:item.created,replacementId:item.replacementReady?item.replacementId:undefined};
  }
  const interrupted=item.state==="failed"||(active&&(!Number.isFinite(Date.parse(updated))||now-Date.parse(updated)>staleAfterMs));
  const state=interrupted?"interrupted":item.state;
@@ -96,7 +116,10 @@ export function durableActiveJob(item:AccountRender,now=Date.now()){
 }
 export async function accountJobStatus(item:AccountRender){
  const durable=durableReadyJob(item);
- if(item.execution==="queue")return durable??durableActiveJob(item)??missingJob(item);
+ if(item.execution==="queue"){
+  if(item.replacementId&&!item.replacementReady){await ensureRecoveryChild(item);item.replacementReady=true;}
+  return durable??durableActiveJob(item)??missingJob(item);
+ }
  const local=await readJob(item.id).catch(()=>null);
  if(!local)return durable??durableActiveJob(item)??missingJob(item);
  if(local.projectId!==item.projectId||local.storyboardVersion!==item.storyboardVersion)return missingJob(item);

@@ -11,6 +11,7 @@
     "test": "tsx --test tests/pipeline.test.ts tests/studio-approvals.test.ts tests/private-media.test.ts tests/durable-renders.test.ts",
     "typecheck": "tsc --noEmit",
     "test:integration": "tsx --test tests/integration.test.ts",
+    "test:queue-recovery": "tsx tests/queue-recovery.integration.ts",
     "review": "tsx src/review-server.ts",
     "dev": "npm --prefix apps/studio run dev",
     "worker:account": "tsx src/account-queue-worker.ts",

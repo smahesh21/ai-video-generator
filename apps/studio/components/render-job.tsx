@@ -3,7 +3,7 @@ import Link from "next/link";
 import {useEffect,useState} from "react";
 import {useStudio,type Project} from "./store";
 
-type Job={id:string;projectId:string;storyboardVersion:number;state:string;stage:string;error:string|null;retryable:boolean;cancelRequested?:boolean;outputReady:boolean;updated:string;created?:string};
+type Job={id:string;projectId:string;storyboardVersion:number;state:string;stage:string;error:string|null;retryable:boolean;cancelRequested?:boolean;outputReady:boolean;updated:string;created?:string;replacementId?:string};
 const stages=[{key:"plan",title:"Preparing approved scenes"},{key:"speech",title:"Creating silent timing tracks"},{key:"compile",title:"Syncing captions and motion"},{key:"render",title:"Rendering vertical video"},{key:"validate",title:"Checking the finished MP4"}];
 function RenderPanel({project,save,accountMode}:{project:Project;save:(project:Project)=>Promise<boolean>;accountMode:boolean}){
  const [jobId,setJobId]=useState(project.renderJob&&project.renderJob.storyboardVersion===project.storyboard?.version?project.renderJob.id:"");
@@ -46,6 +46,12 @@ function RenderPanel({project,save,accountMode}:{project:Project;save:(project:P
     const result=await response.json() as Job;
     if(!active)return;
     if(result.projectId!==project.id||result.storyboardVersion!==approved.version){keepPolling=false;throw Error("This render belongs to another storyboard.");}
+    if(result.replacementId){
+     keepPolling=false;
+     setJob(null);setJobId(result.replacementId);
+     if(project.renderJob?.id===jobId)void save({...project,renderJob:{id:result.replacementId,storyboardVersion:approved.version},updated:new Date().toISOString()}).then(saved=>{if(!saved)setMessage("The recovery render started, but its link could not be saved to this project.");});
+     return;
+    }
     setMissing(false);setJob(result);setMessage("");
     keepPolling=result.state==="queued"||result.state==="running";
    }catch(error){if(active)setMessage(error instanceof Error?error.message:"Could not load render status.");}
