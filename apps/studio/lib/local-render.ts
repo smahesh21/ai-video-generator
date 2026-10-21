@@ -62,7 +62,7 @@ export async function readJob(id:string){
  const state=manifest?.state==="cancelled"?"cancelled":workerInterrupted(job,health)?"interrupted":job.state;
  const active=state==="queued"||state==="running";
  const cancelRequested=active&&await fs.access(path.join(dir,"cancel.request")).then(()=>true,()=>false);
- return {id,projectId:job.projectId,storyboardVersion:job.storyboardVersion,state,stage:manifest?.stage??(state==="queued"?"queued":"planning"),error:state==="cancelled"?null:state==="interrupted"?"The local render worker stopped. Start a fresh render from this approved storyboard.":job.error??null,retryable:state==="cancelled"||state==="interrupted"?false:job.retryable===true,cancelRequested,updated:job.updated,outputReady:state==="ready"&&manifest?.state==="ready-for-review"};
+ return {id,projectId:job.projectId,storyboardVersion:job.storyboardVersion,state,stage:manifest?.stage??(state==="queued"?"queued":"planning"),error:state==="cancelled"?null:state==="interrupted"?"The local render worker stopped. Start a fresh render from this approved storyboard.":job.error??null,retryable:state==="cancelled"||state==="interrupted"?false:job.retryable===true,cancelRequested,updated:job.updated,outputReady:state==="ready"&&manifest?.state==="ready-for-review",mediaStorage:job.mediaStorage==="r2"?"r2":"local"};
 }
 export async function cancelJob(id:string){
  const job=await readJob(id);

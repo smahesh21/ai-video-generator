@@ -3,6 +3,7 @@ import path from 'node:path';
 import {studioPlan} from './studio-plan';
 import {createRun,approveRun,generate} from './pipeline';
 import {readJson,writeJson,runDir,exists} from './storage';
+import {uploadRenderMedia} from './private-media';
 
 const id=process.argv[2],mode=process.argv[3]??'start';
 if(!id)throw Error('Missing render ID');
@@ -28,7 +29,8 @@ async function main(){
    await approveRun(id,manifest.planHash,'local-studio-storyboard-review',true);
   }else if(mode!=='retry')throw Error('Invalid worker mode');
   const result=await generate(id,{cancelFile:path.join(dir,'cancel.request')});
-  await writeJson(jobPath,{...job,state:'ready',updated:new Date().toISOString(),error:null,outputHash:result.outputHash});
+  const mediaStorage=job.ownerId&&await uploadRenderMedia(id,dir)?'r2':'local';
+  await writeJson(jobPath,{...job,state:'ready',updated:new Date().toISOString(),error:null,outputHash:result.outputHash,mediaStorage});
  }catch(error){
   const message=error instanceof Error?error.message:'Render failed';
   const manifest=await readJson<{state:string}>(path.join(dir,'manifest.json')).catch(()=>null);
