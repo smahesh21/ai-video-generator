@@ -3,6 +3,7 @@ import {createRequire} from 'node:module';
 import dotenv from 'dotenv';
 import {collectWorkerOperations} from '../src/worker-operations-live';
 import {decideWorkerAlert,postWorkerSignal,type WorkerAlertReason,type WorkerAlertState} from '../src/worker-alerts';
+import {writeGoogleCloudWorkerAlert} from '../src/google-cloud-worker-alerts';
 
 dotenv.config({path:process.env.DRISHVO_WORKER_ENV_FILE??path.join(process.cwd(),'apps','studio','.env.local')});
 const require=createRequire(import.meta.url);
@@ -12,7 +13,8 @@ const stateId='worker-operations';
 async function main(){
  const webhook=process.env.WORKER_ALERT_WEBHOOK_URL?.trim();
  const heartbeat=process.env.WORKER_HEARTBEAT_URL?.trim();
- if(!webhook&&!heartbeat)throw Error('Configure WORKER_ALERT_WEBHOOK_URL or WORKER_HEARTBEAT_URL.');
+ const googleCloudLogId=process.env.WORKER_ALERT_GOOGLE_CLOUD_LOG_ID?.trim();
+ if(!webhook&&!heartbeat&&!googleCloudLogId)throw Error('Configure WORKER_ALERT_WEBHOOK_URL, WORKER_HEARTBEAT_URL, or WORKER_ALERT_GOOGLE_CLOUD_LOG_ID.');
  const now=Date.now();
  let result:Awaited<ReturnType<typeof collectWorkerOperations>>|null=null;
  let checkError:string|null=null;
@@ -26,9 +28,10 @@ async function main(){
   const summary=event.kind==='recovery'?'Drishvo render worker recovered':`Drishvo render worker ${event.kind}: ${event.reasons.join(', ')}`;
   await postWorkerSignal(webhook,'WORKER_ALERT_WEBHOOK_URL',{text:summary,content:summary,service:'drishvo-render-worker',...event,...aggregate});
  }
+ if(event&&googleCloudLogId)await writeGoogleCloudWorkerAlert(googleCloudLogId,{service:'drishvo-render-worker',...event,...aggregate});
  if(current.healthy&&heartbeat)await postWorkerSignal(heartbeat,'WORKER_HEARTBEAT_URL',{service:'drishvo-render-worker',checkedAt:new Date(now).toISOString(),healthy:true,...aggregate});
  const stateSaved=await states.updateOne({_id:stateId},{$set:{...state,updatedAt:new Date(now).toISOString()}},{upsert:true}).then(()=>true,()=>false);
- console.log(JSON.stringify({checkedAt:new Date(now).toISOString(),healthy:current.healthy,alert:event?.kind??null,heartbeatSent:current.healthy&&Boolean(heartbeat),stateSaved,reasons:current.reasons,error:checkError}));
+ console.log(JSON.stringify({checkedAt:new Date(now).toISOString(),healthy:current.healthy,alert:event?.kind??null,webhookSent:Boolean(event&&webhook),googleCloudLogSent:Boolean(event&&googleCloudLogId),heartbeatSent:current.healthy&&Boolean(heartbeat),stateSaved,reasons:current.reasons,error:checkError}));
  if(!current.healthy)process.exitCode=2;
 }
 
