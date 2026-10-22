@@ -12,7 +12,7 @@ RUN npm ci --no-audit --no-fund --loglevel=info --fetch-timeout=900000 --fetch-r
     && npm --prefix apps/studio ci --no-audit --no-fund --loglevel=info --fetch-timeout=900000 --fetch-retries=5
 
 COPY src ./src
-COPY scripts/check-worker-operations.ts ./scripts/check-worker-operations.ts
+COPY scripts/check-worker-operations.ts scripts/notify-worker-operations.ts ./scripts/
 COPY apps/studio/lib ./apps/studio/lib
 COPY tsconfig.json ./
 RUN mkdir -p runs .cache node_modules/.cache && chown -R node:node runs .cache node_modules/.cache
