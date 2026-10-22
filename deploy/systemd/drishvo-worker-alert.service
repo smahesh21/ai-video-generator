@@ -5,6 +5,6 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-WorkingDirectory=/opt/drishvo
+WorkingDirectory=/opt/drishvo/app
 Environment=DRISHVO_WORKER_ENV_FILE=/etc/drishvo/worker.env
 ExecStart=/usr/bin/docker compose -f compose.worker.yaml run --rm --no-deps worker ./node_modules/.bin/tsx scripts/notify-worker-operations.ts
