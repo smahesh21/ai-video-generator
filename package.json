@@ -16,6 +16,7 @@
     "dev": "npm --prefix apps/studio run dev",
     "worker:account": "tsx src/account-queue-worker.ts",
     "worker:check": "tsx scripts/check-worker-operations.ts",
+    "worker:verify-hosted": "tsx scripts/verify-hosted-worker.ts",
     "build:studio": "npm --prefix apps/studio run build",
     "typecheck:studio": "npm --prefix apps/studio run typecheck"
   },
