@@ -8,6 +8,7 @@ import {createRun,approveRun,generate} from './pipeline';
 import {readJson,writeJson,runDir,RUNS} from './storage';
 import {uploadRenderMedia,removeRenderMedia,privateMediaConfigured} from './private-media';
 import {startWorkerHealthServer,workerReady} from './account-worker-health';
+import {cleanupTerminalRunDirectory,type CleanableRunState} from './worker-run-cleanup';
 
 dotenv.config({path:path.join(process.cwd(),'apps','studio','.env.local')});
 const require=createRequire(import.meta.url);
@@ -27,7 +28,7 @@ async function processJob(job:ClaimedJob){
  const dir=runDir(job.id);
  if(path.dirname(dir)!==RUNS)throw Error('Unsafe render directory.');
  const cancelPath=path.join(dir,'cancel.request');
- let heartbeatWrite:Promise<void>|null=null,lostLease=false,ready=false,mediaUploadStarted=false;
+ let heartbeatWrite:Promise<void>|null=null,lostLease=false,ready=false,mediaUploadStarted=false,cleanupState:CleanableRunState|null=null;
  function beat(){
   if(heartbeatWrite)return heartbeatWrite;
   heartbeatWrite=(async()=>{try{
@@ -65,6 +66,7 @@ async function processJob(job:ClaimedJob){
   const readyAt=new Date().toISOString();
   await finishAccountJob(job.ownerId,job.id,workerId,'ready',{readyAt});
   ready=true;
+  cleanupState='ready';
   await writeJson(path.join(dir,'studio-job.json'),{id:job.id,ownerId:job.ownerId,projectId:job.projectId,storyboardVersion:job.storyboardVersion,state:'ready',created:job.created,updated:readyAt,mediaStorage:'r2'});
   console.log(`Render ${job.id} is ready.`);
  }catch(error){
@@ -73,9 +75,17 @@ async function processJob(job:ClaimedJob){
   const latest=await accountJobRecord(job.ownerId,job.id).catch(()=>null);
   const cancelled=latest?.cancelRequested===true||await fs.access(cancelPath).then(()=>true,()=>false)&&!lostLease;
   const message=error instanceof Error?error.message:'Render failed.';
-  await finishAccountJob(job.ownerId,job.id,workerId,cancelled?'cancelled':'failed',{error:cancelled?null:message,retryable:!cancelled&&!lostLease}).catch(updateError=>console.error('Could not save render failure:',updateError));
+  try{
+   await finishAccountJob(job.ownerId,job.id,workerId,cancelled?'cancelled':'failed',{error:cancelled?null:message,retryable:!cancelled&&!lostLease});
+   if(cancelled)cleanupState='cancelled';
+  }catch(updateError){console.error('Could not save render failure:',updateError);}
   console.error(`Render ${job.id} ${cancelled?'cancelled':'failed'}: ${message}`);
- }finally{if(timer)clearInterval(timer);}
+ }finally{
+  if(timer)clearInterval(timer);
+  const pendingHeartbeat=heartbeatWrite as Promise<void>|null;
+  if(pendingHeartbeat)await pendingHeartbeat.catch((heartbeatError:unknown)=>console.error('Final render heartbeat failed:',heartbeatError));
+  if(cleanupState)await cleanupTerminalRunDirectory(job.id,cleanupState).catch(cleanupError=>console.error('Could not clean terminal render directory:',cleanupError));
+ }
 }
 
 async function main(){
