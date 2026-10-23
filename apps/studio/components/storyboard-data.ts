@@ -24,7 +24,7 @@ export function createStoryboard(project:Project):StoryboardData{
  "End on one short line of text and a visual recap."
  ]:source.visual;
  const scenes:Scene[]=titles.map((title,i)=>({id:`scene-${i+1}`,title,narration:narration[i],visual:visual[i],seconds:12}));
- return {version:1,scenes};
+ return {version:1,scenes,source:"template"};
 }
 
 

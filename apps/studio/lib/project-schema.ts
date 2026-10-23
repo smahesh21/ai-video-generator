@@ -1,6 +1,6 @@
 export type Scene={id:string;title:string;narration:string;visual:string;seconds:number};
 export type ApprovedStoryboard={version:number;scenes:Scene[];at:string};
-export type StoryboardData={version:number;scenes:Scene[];approved?:ApprovedStoryboard;approvalHistory?:ApprovedStoryboard[]};
+export type StoryboardData={version:number;scenes:Scene[];source?:"ai"|"template";generatedAt?:string;plannerModel?:string;approved?:ApprovedStoryboard;approvalHistory?:ApprovedStoryboard[]};
 export type Project={id:string;topic:string;notes:string;audience:string;voice:"male"|"female";updated:string;sample:boolean;motif:"water"|"memory"|"binary"|"concept";storyboard?:StoryboardData;publishDraft?:{caption:string};renderJob?:{id:string;storyboardVersion:number}};
 const record=(value:unknown):value is Record<string,unknown>=>!!value&&typeof value==="object"&&!Array.isArray(value);
 const text=(value:unknown,max:number)=>typeof value==="string"&&value.length<=max;
@@ -15,6 +15,9 @@ function validApproval(value:unknown):value is ApprovedStoryboard{
 }
 function validStoryboard(value:unknown):value is StoryboardData{
  if(!record(value)||!version(value.version)||!Array.isArray(value.scenes)||value.scenes.length<1||value.scenes.length>12||!value.scenes.every(validScene))return false;
+ if(value.source!==undefined&&value.source!=="ai"&&value.source!=="template")return false;
+ if(value.generatedAt!==undefined&&!text(value.generatedAt,40))return false;
+ if(value.plannerModel!==undefined&&!text(value.plannerModel,120))return false;
  if(value.approvalHistory!==undefined&&(!Array.isArray(value.approvalHistory)||value.approvalHistory.length>100||!value.approvalHistory.every(validApproval)))return false;
  const history=value.approvalHistory??[];
  const approved=value.approved;

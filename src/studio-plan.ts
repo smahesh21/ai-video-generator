@@ -9,8 +9,8 @@ function cleanScene(value:unknown,index:number):StudioScene{
  if(!record(value))throw Error(`Scene ${index+1} is missing.`);
  const {id,title,narration,visual,seconds}=value;
  if(typeof id!=='string'||!safeId.test(id))throw Error(`Scene ${index+1} has an invalid ID.`);
- if(typeof title!=='string'||!title.trim()||title.length>48)throw Error(`Scene ${index+1} needs a title of 1–48 characters for this fixture renderer.`);
- if(typeof narration!=='string'||!narration.trim()||narration.length>170)throw Error(`Scene ${index+1} needs narration of 1–170 characters for this fixture renderer.`);
+ if(typeof title!=='string'||!title.trim()||title.length>64)throw Error(`Scene ${index+1} needs a title of 1–64 characters for this fixture renderer.`);
+ if(typeof narration!=='string'||!narration.trim()||narration.length>1200)throw Error(`Scene ${index+1} needs narration of 1–1,200 characters for this fixture renderer.`);
  if(typeof visual!=='string'||!visual.trim()||visual.length>1200)throw Error(`Scene ${index+1} needs a visual direction of 1–1,200 characters.`);
  if(typeof seconds!=='number'||!Number.isFinite(seconds)||seconds<=0)throw Error(`Scene ${index+1} has invalid timing.`);
  return {id,title,narration,visual,seconds};
@@ -52,20 +52,34 @@ function labels(motif:StudioSnapshot['motif'],index:number,title:string):[string
  if(motif==='binary')return ['Current range','Next half'];
  return [title.slice(0,24),'Next idea'];
 }
+function narrationBlocks(text:string,sceneId:string):Plan['scenes'][number]['narration']{
+ const blocks:string[]=[];
+ let remaining=text;
+ while(remaining.length>250){
+  const splitAt=remaining.lastIndexOf(' ',250);
+  if(splitAt<=0)throw Error('Narration contains a word longer than 250 characters.');
+  blocks.push(remaining.slice(0,splitAt));
+  remaining=remaining.slice(splitAt+1);
+ }
+ blocks.push(remaining);
+ if(blocks.length>6)throw Error('Narration needs more than six speech blocks. Shorten this scene before rendering.');
+ return blocks.map((block,index)=>({id:`${sceneId}-line-${index+1}`,text:block}));
+}
 export function studioPlan(input:unknown,runId:string,ownerId?:string):Plan{
  const project=validateStudioSnapshot(input);
  if(!safeId.test(runId))throw Error('Invalid render ID.');
  const motif=inferredMotif(project);
  const scenes=project.storyboard.approved.scenes.map((source,index)=>{
   const id=`scene-${index+1}`;
-  const blockId=`${id}-line-1`;
   const text=source.narration;
+  const narration=narrationBlocks(text,id);
+  const blockId=narration[0].id;
   const [first,second]=kinds(motif,index);
   const [firstLabel,secondLabel]=labels(motif,index,source.title);
   const objects=[{id:`${id}-object-1`,kind:first,label:firstLabel},{id:`${id}-object-2`,kind:second,label:secondLabel}];
-  const phrase=text.split(/\s+/).slice(0,Math.min(3,text.split(/\s+/).length)).join(' ');
+  const phrase=narration[0].text.trim().split(/\s+/).slice(0,3).join(' ');
   const events=objects.map((object,item)=>({id:`${id}-event-${item+1}`,targetId:object.id,action:'reveal' as const,cue:{blockId,phrase,occurrence:1},offsetMs:item*180,durationMs:400}));
-  return {id,type:index===0?'title' as const:index===5?'takeaway' as const:'labeled-diagram' as const,title:source.title,narration:[{id:blockId,text}],objects,events,holdMs:200,labelScale:1};
+  return {id,type:index===0?'title' as const:index===5?'takeaway' as const:'labeled-diagram' as const,title:source.title,narration,objects,events,holdMs:200,labelScale:1};
  });
  return validatePlan({schemaVersion:1,ownerId:ownerId?'user_'+createHash('sha256').update(ownerId).digest('hex').slice(0,32):'local',projectId:project.id,versionId:runId,parentVersionId:null,topic:project.topic,audience:project.audience||'Curious learners',learningObjective:`Explain ${project.topic}`.slice(0,600),language:'en',voicePreset:project.voice==='female'?'indian-english-female':'indian-english-male',mode:'fixture',sources:[{id:'studio-visual-directions',text:project.storyboard.approved.scenes.map((scene,index)=>`Scene ${index+1}: ${scene.visual}`).join('\n').slice(0,20000)}],warnings:['Studio fixture render: silent synthetic timing; no Gemini or ElevenLabs call. Scene title and narration match the approved storyboard. Visual directions are retained but simplified to supported schematic graphics. Human review is required.'],scenes});
 }

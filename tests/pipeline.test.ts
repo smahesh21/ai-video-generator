@@ -25,6 +25,15 @@ test('studio render uses the exact approved copy and remains a fixture',()=>{
  assert.deepEqual(render.scenes.map(s=>s.narration[0].text),source.storyboard.approved.scenes.map(s=>s.narration));
  assert.match(render.sources[0].text,/Show diagram 6/);
 });
+test('studio render safely splits AI narration longer than the old fixture limit',()=>{
+ const source=studioSnapshot();
+ source.storyboard.scenes[2].narration=('A clear explanation uses approved words and remains readable. ').repeat(6).trim();
+ source.storyboard.approved.scenes=structuredClone(source.storyboard.scenes);
+ const render=studioPlan(source,'studio_test');
+ assert.ok(render.scenes[2].narration.length>1);
+ assert.ok(render.scenes[2].narration.every(block=>block.text.length<=250));
+ assert.equal(speechInput(render.scenes[2]).text,source.storyboard.scenes[2].narration);
+});
 test('a water-cycle idea uses relevant visual symbols without changing approved narration',()=>{
  const source=studioSnapshot();source.motif='concept';
  const render=studioPlan(source,'studio_test');
@@ -89,6 +98,7 @@ test('worker recovery waits for a stale heartbeat and a stopped process',()=>{
  assert.equal(workerInterrupted({state:'ready',updated:old},{pid:123,at:old},now,()=>false),false);
 });
 test('provider failures redact response body and do not retry',async()=>{let calls=0;const fake=(async()=>{calls++;return new Response('SECRET BODY',{status:401});}) as typeof fetch;await assert.rejects(()=>providerJson('https://example.invalid',{},'Test',fake),e=>e instanceof Error&&!e.message.includes('SECRET')&&e.message.includes('401'));assert.equal(calls,1);});
-test('planner extracts supported interactions response forms',()=>{assert.equal(extractPlannerText({status:'completed',outputs:[{type:'text',text:'{}'}]}),'{}');assert.equal(extractPlannerText({status:'completed',steps:[{type:'model_output',content:[{type:'text',text:'{}'}]}]}),'{}');assert.throws(()=>extractPlannerText({status:'failed'}));});
-test('mocked planner is stateless and application owns identity',async()=>{process.env.GEMINI_API_KEY='test-placeholder';let body:any;const p=plan();const fake=(async(_url,init)=>{body=JSON.parse(init!.body as string);return Response.json({status:'completed',output_text:JSON.stringify({learningObjective:p.learningObjective,warnings:[],scenes:p.scenes})});}) as typeof fetch;const result=await planLive('water','notes','server-owned','indian-english-female',undefined,undefined,fake);assert.equal(result.ownerId,'local');assert.equal(result.versionId,'server-owned');assert.equal(body.store,false);assert.equal(body.background,false);delete process.env.GEMINI_API_KEY;});
+test('provider network errors remain safe and are not retried',async()=>{let calls=0;const fake=(async()=>{calls++;throw new DOMException('sensitive transport detail','TimeoutError');}) as typeof fetch;await assert.rejects(()=>providerJson('https://example.invalid',{},'Test',fake),e=>e instanceof Error&&!e.message.includes('sensitive')&&e.message.includes('timed out'));assert.equal(calls,1);});
+test('planner extracts supported Gemini response forms',()=>{assert.equal(extractPlannerText({candidates:[{content:{parts:[{text:'{}'}]}}]}),'{}');assert.equal(extractPlannerText({status:'completed',outputs:[{type:'text',text:'{}'}]}),'{}');assert.equal(extractPlannerText({status:'completed',steps:[{type:'model_output',content:[{type:'text',text:'{}'}]}]}),'{}');assert.throws(()=>extractPlannerText({status:'failed'}));});
+test('mocked planner uses structured generation and application owns identity',async()=>{process.env.GEMINI_API_KEY='test-placeholder';let body:any;let url='';const p=plan();const fake=(async(input,init)=>{url=String(input);body=JSON.parse(init!.body as string);return Response.json({candidates:[{content:{parts:[{text:JSON.stringify({learningObjective:p.learningObjective,warnings:[],scenes:p.scenes})}]}}]});}) as typeof fetch;const result=await planLive('water','notes','server-owned','indian-english-female',undefined,undefined,fake);assert.equal(result.ownerId,'local');assert.equal(result.versionId,'server-owned');assert.match(url,/generateContent$/);assert.equal(body.generationConfig.responseMimeType,'application/json');assert.ok(body.generationConfig.responseSchema);delete process.env.GEMINI_API_KEY;});
 test('mocked ElevenLabs request retains exact approved text',async()=>{process.env.ELEVENLABS_API_KEY='test-placeholder';process.env.ELEVENLABS_VOICE_ID_INDIAN_FEMALE='test-voice';const p=plan();p.mode='live';let body:any;const text=speechInput(p.scenes[0]).text;const fake=(async(_url,init)=>{body=JSON.parse(init!.body as string);return Response.json({audio_base64:silentWav(1).toString('base64'),alignment:fixtureAlignment(text,1)});}) as typeof fetch;const response=await synthesize(p.scenes[0],p,fake);assert.equal(body.text,text);assert.equal(response.normalizedAlignment,null);delete process.env.ELEVENLABS_API_KEY;delete process.env.ELEVENLABS_VOICE_ID_INDIAN_FEMALE;});
