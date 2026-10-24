@@ -28,7 +28,7 @@ function StoryboardEditor({project,save}:{project:Project;save:(p:Project)=>Prom
    const narration=editNarration.trim(),visual=editVisual.trim();
    if(!narration||!visual){setMessage("Narration and visual direction are both required.");return;}
    if(narration===scene.narration&&visual===scene.visual){setEditing(false);return;}
-   const scenes=draft.scenes.map((s,i)=>i===selected?{...s,narration,visual}:s);
+   const scenes=draft.scenes.map((s,i)=>i===selected?{...s,narration,visual,visualPlan:undefined}:s);
    void commit({...draft,version:draft.version+1,scenes},"Scene "+(selected+1)+" saved as storyboard v"+(draft.version+1)+".");
  }
  function approve(){

@@ -1,13 +1,24 @@
-export type Scene={id:string;title:string;narration:string;visual:string;seconds:number};
+const visualKinds=["sun","water","cloud","rain","ground","plant","chip","drive","app","power","number","arrow","earth","planet","rocket","satellite","orbit","book","brain","clock","light","atom","chart","coin","shield","network","phone","person","check"] as const;
+type VisualKind=typeof visualKinds[number];
+export type SceneVisualPlan={type:"title"|"process-flow"|"labeled-diagram"|"comparison"|"takeaway";objects:{kind:VisualKind;label:string}[];events:{objectIndex:number;action:"reveal"|"highlight";phrase:string;offsetMs:number;durationMs:number}[]};
+export type Scene={id:string;title:string;narration:string;visual:string;seconds:number;visualPlan?:SceneVisualPlan};
 export type ApprovedStoryboard={version:number;scenes:Scene[];at:string};
 export type StoryboardData={version:number;scenes:Scene[];source?:"ai"|"template";generatedAt?:string;plannerModel?:string;approved?:ApprovedStoryboard;approvalHistory?:ApprovedStoryboard[]};
 export type Project={id:string;topic:string;notes:string;audience:string;voice:"male"|"female";updated:string;sample:boolean;motif:"water"|"memory"|"binary"|"concept";storyboard?:StoryboardData;publishDraft?:{caption:string};renderJob?:{id:string;storyboardVersion:number}};
 const record=(value:unknown):value is Record<string,unknown>=>!!value&&typeof value==="object"&&!Array.isArray(value);
 const text=(value:unknown,max:number)=>typeof value==="string"&&value.length<=max;
 const version=(value:unknown)=>Number.isSafeInteger(value)&&Number(value)>=1;
+function validVisualPlan(value:unknown):value is SceneVisualPlan{
+ if(!record(value)||!["title","process-flow","labeled-diagram","comparison","takeaway"].includes(String(value.type))||!Array.isArray(value.objects)||value.objects.length<1||value.objects.length>4||!Array.isArray(value.events)||value.events.length>12)return false;
+ const objects=value.objects;
+ if(!objects.every(object=>record(object)&&visualKinds.includes(object.kind as VisualKind)&&text(object.label,24)&&Boolean(object.label)))return false;
+ return value.events.every(event=>record(event)&&Number.isInteger(event.objectIndex)&&Number(event.objectIndex)>=0&&Number(event.objectIndex)<objects.length&&(event.action==="reveal"||event.action==="highlight")&&text(event.phrase,250)&&Boolean(event.phrase)&&Number.isInteger(event.offsetMs)&&Number(event.offsetMs)>=-200&&Number(event.offsetMs)<=500&&Number.isInteger(event.durationMs)&&Number(event.durationMs)>=100&&Number(event.durationMs)<=1500);
+}
 function validScene(value:unknown):value is Scene{
  if(!record(value))return false;
- return text(value.id,80)&&text(value.title,240)&&text(value.narration,1200)&&text(value.visual,1200)&&typeof value.seconds==="number"&&Number.isFinite(value.seconds)&&value.seconds>0&&value.seconds<=90;
+ const plan=value.visualPlan;
+ const validPlan=plan===undefined||validVisualPlan(plan);
+ return text(value.id,80)&&text(value.title,240)&&text(value.narration,1200)&&text(value.visual,1200)&&typeof value.seconds==="number"&&Number.isFinite(value.seconds)&&value.seconds>0&&value.seconds<=90&&validPlan;
 }
 function validApproval(value:unknown):value is ApprovedStoryboard{
  if(!record(value))return false;

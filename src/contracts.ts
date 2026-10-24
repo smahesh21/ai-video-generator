@@ -6,7 +6,7 @@ export const blockSchema = z.object({id:idSchema,text:z.string().min(1).max(250)
 export const sceneSchema = z.object({
  id:idSchema,type:z.enum(['title','process-flow','labeled-diagram','comparison','binary-search','takeaway']),
  title:z.string().min(1).max(64),narration:z.array(blockSchema).min(1).max(6),
- objects:z.array(z.object({id:idSchema,kind:z.enum(['sun','water','cloud','rain','ground','plant','chip','drive','app','power','number','arrow']),label:z.string().min(1).max(24)}).strict()).min(1).max(4),
+ objects:z.array(z.object({id:idSchema,kind:z.enum(['sun','water','cloud','rain','ground','plant','chip','drive','app','power','number','arrow','earth','planet','rocket','satellite','orbit','book','brain','clock','light','atom','chart','coin','shield','network','phone','person','check']),label:z.string().min(1).max(24)}).strict()).min(1).max(4),
  events:z.array(z.object({id:idSchema,targetId:idSchema,action:z.enum(['reveal','highlight']),cue:z.object({blockId:idSchema,phrase:z.string().min(1),occurrence:z.number().int().min(1)}).strict(),offsetMs:z.number().int().min(-200).max(500).default(0),durationMs:z.number().int().min(100).max(1500).default(400)}).strict()).max(12),
  holdMs:z.number().int().min(0).max(500).default(200),labelScale:z.number().min(.8).max(1.2).default(1),
  binary:z.object({values:z.array(z.number().int()).min(3).max(9),target:z.number().int(),iteration:z.number().int().min(0).max(8)}).strict().optional()

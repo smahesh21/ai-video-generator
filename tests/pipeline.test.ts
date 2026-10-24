@@ -49,6 +49,24 @@ test('a water-cycle idea uses relevant visual symbols without changing approved 
  assert.deepEqual(render.scenes[3].objects.map(object=>object.label),['Clouds','Rainfall']);
  assert.equal(render.scenes[0].narration[0].text,source.storyboard.approved.scenes[0].narration);
 });
+test('topic-specific visual directions do not collapse into the generic number and arrow animation',()=>{
+ const source=studioSnapshot();source.topic='Mangalyaan mission';source.motif='concept';
+ source.storyboard.scenes[0]={id:'scene-1',title:'India reaches Mars',narration:'India launched a spacecraft toward Mars and entered orbit.',visual:'Show Earth Launch Pad, Rocket Thruster, Mars Target Path. Animate to reveal Rocket Thruster when the narration says “launched a spacecraft”.',seconds:12};
+ source.storyboard.approved.scenes=structuredClone(source.storyboard.scenes);
+ const render=studioPlan(source,'studio_space');
+ assert.deepEqual(render.scenes[0].objects.map(object=>object.kind),['earth','rocket','planet']);
+ assert.notDeepEqual(render.scenes[0].objects.map(object=>object.kind),['number','arrow']);
+});
+test('a preserved AI visual plan reaches the renderer with its scene type, objects, and narration cue',()=>{
+ const source=studioSnapshot();source.topic='How networks stay secure';source.motif='concept';
+ source.storyboard.scenes[1].visualPlan={type:'process-flow',objects:[{kind:'network',label:'Connected nodes'},{kind:'shield',label:'Security layer'}],events:[{objectIndex:1,action:'highlight',phrase:'precise fact',offsetMs:80,durationMs:600}]};
+ source.storyboard.approved.scenes=structuredClone(source.storyboard.scenes);
+ const render=studioPlan(source,'studio_visual_plan');
+ assert.equal(render.scenes[1].type,'process-flow');
+ assert.deepEqual(render.scenes[1].objects.map(object=>object.kind),['network','shield']);
+ assert.equal(render.scenes[1].events[0].action,'highlight');
+ assert.equal(render.scenes[1].events[0].cue.phrase,'precise fact');
+});
 test('studio render rejects stale approval and altered approved scenes',()=>{
  const source=studioSnapshot();source.storyboard.version=2;
  assert.throws(()=>validateStudioSnapshot(source),/needs approval/);
