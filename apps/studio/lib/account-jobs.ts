@@ -6,7 +6,8 @@ import {randomUUID} from "node:crypto";
 import {createHash} from "node:crypto";
 
 type ActiveState="queued"|"running"|"ready"|"failed"|"cancelled"|"interrupted";
-type AccountRender={id:string;ownerId:string;projectId:string;storyboardVersion:number;created:string;readyAt?:string;mediaStorage?:"r2";snapshot?:StudioSnapshot;state?:ActiveState;stage?:string;updated?:string;error?:string|null;retryable?:boolean;cancelRequested?:boolean;execution?:"queue";renderMode?:"fixture";workerId?:string;leaseUntil?:string;crashRetries?:number;parentJobId?:string;replacementId?:string;replacementReady?:boolean};
+export type AccountRenderMode="fixture"|"live";
+type AccountRender={id:string;ownerId:string;projectId:string;storyboardVersion:number;created:string;readyAt?:string;mediaStorage?:"r2";snapshot?:StudioSnapshot;state?:ActiveState;stage?:string;updated?:string;error?:string|null;retryable?:boolean;cancelRequested?:boolean;execution?:"queue";renderMode?:AccountRenderMode;workerId?:string;leaseUntil?:string;crashRetries?:number;parentJobId?:string;replacementId?:string;replacementReady?:boolean};
 const staleAfterMs=30_000;
 const leaseMs=60_000;
 let indexReady:Promise<unknown>|null=null;
@@ -19,12 +20,12 @@ export async function recordAccountJob(ownerId:string,job:Omit<AccountRender,"ow
  const {records,ready}=collection();await ready;
  await records.insertOne({...job,ownerId,state:"queued",stage:"queued",updated:job.created,cancelRequested:false});
 }
-export async function enqueueAccountJob(ownerId:string,snapshot:StudioSnapshot){
+export async function enqueueAccountJob(ownerId:string,snapshot:StudioSnapshot,renderMode:AccountRenderMode="fixture"){
  const created=new Date().toISOString(),id="studio_"+randomUUID().replaceAll("-","").slice(0,24);
- studioPlan(snapshot,id,ownerId);
- const job={id,projectId:snapshot.id,storyboardVersion:snapshot.storyboard.version,created,snapshot,execution:"queue" as const,renderMode:"fixture" as const};
+ studioPlan(snapshot,id,ownerId,renderMode);
+ const job={id,projectId:snapshot.id,storyboardVersion:snapshot.storyboard.version,created,snapshot,execution:"queue" as const,renderMode};
  await recordAccountJob(ownerId,job);
- return {id,projectId:job.projectId,storyboardVersion:job.storyboardVersion};
+ return {id,projectId:job.projectId,storyboardVersion:job.storyboardVersion,renderMode};
 }
 export async function claimAccountJob(workerId:string){
  const {records,ready}=collection();await ready;
@@ -47,7 +48,7 @@ async function ensureRecoveryChild(item:AccountRender){
  if(!item.replacementId||!item.snapshot)return;
  const {records,ready}=collection();await ready;
  const created=new Date().toISOString();
- await records.updateOne({id:item.replacementId},{$setOnInsert:{id:item.replacementId,ownerId:item.ownerId,projectId:item.projectId,storyboardVersion:item.storyboardVersion,created,updated:created,snapshot:item.snapshot,execution:"queue",renderMode:"fixture",state:"queued",stage:"queued",cancelRequested:false,crashRetries:1,parentJobId:item.id}},{upsert:true});
+ await records.updateOne({id:item.replacementId},{$setOnInsert:{id:item.replacementId,ownerId:item.ownerId,projectId:item.projectId,storyboardVersion:item.storyboardVersion,created,updated:created,snapshot:item.snapshot,execution:"queue",renderMode:item.renderMode??"fixture",state:"queued",stage:"queued",cancelRequested:false,crashRetries:1,parentJobId:item.id}},{upsert:true});
  const child=await records.findOne({id:item.replacementId});
  if(child?.ownerId!==item.ownerId||child.parentJobId!==item.id)throw Error("Recovery job ID collision.");
  await records.updateOne({ownerId:item.ownerId,id:item.id,execution:"queue",state:"interrupted",replacementId:item.replacementId},{$set:{replacementReady:true}});
@@ -97,9 +98,9 @@ export async function markAccountJobReady(ownerId:string,id:string,projectId:str
 }
 export function durableReadyJob(item:AccountRender){
  if(item.mediaStorage!=="r2"||!item.readyAt)return null;
- return {id:item.id,projectId:item.projectId,storyboardVersion:item.storyboardVersion,state:"ready",stage:"validate",error:null,retryable:false,cancelRequested:false,updated:item.readyAt,outputReady:true,mediaStorage:"r2" as const,created:item.created};
+ return {id:item.id,projectId:item.projectId,storyboardVersion:item.storyboardVersion,renderMode:item.renderMode??"fixture",state:"ready",stage:"validate",error:null,retryable:false,cancelRequested:false,updated:item.readyAt,outputReady:true,mediaStorage:"r2" as const,created:item.created};
 }
-function missingJob(item:AccountRender){return {id:item.id,projectId:item.projectId,storyboardVersion:item.storyboardVersion,state:"missing",stage:"unavailable",error:"The local render files are unavailable.",retryable:false,cancelRequested:false,updated:item.created,outputReady:false,created:item.created};}
+function missingJob(item:AccountRender){return {id:item.id,projectId:item.projectId,storyboardVersion:item.storyboardVersion,renderMode:item.renderMode??"fixture",state:"missing",stage:"unavailable",error:"The local render files are unavailable.",retryable:false,cancelRequested:false,updated:item.created,outputReady:false,created:item.created};}
 export function durableActiveJob(item:AccountRender,now=Date.now()){
  if(!item.state)return null;
  if(item.state==="ready")return missingJob(item);
@@ -108,11 +109,11 @@ export function durableActiveJob(item:AccountRender,now=Date.now()){
  if(item.execution==="queue"){
   const interrupted=item.state==="interrupted"||(item.state==="running"&&!!item.leaseUntil&&Date.parse(item.leaseUntil)<now);
   const state=interrupted?"interrupted":item.state;
-  return {id:item.id,projectId:item.projectId,storyboardVersion:item.storyboardVersion,state,stage:interrupted?"unavailable":item.stage??state,error:interrupted?"The render worker stopped. A new attempt is queued from the approved storyboard.":item.error??null,retryable:state==="failed"&&item.retryable===true,cancelRequested:active&&!interrupted&&item.cancelRequested===true,updated,outputReady:false,created:item.created,replacementId:item.replacementReady?item.replacementId:undefined};
+  return {id:item.id,projectId:item.projectId,storyboardVersion:item.storyboardVersion,renderMode:item.renderMode??"fixture",state,stage:interrupted?"unavailable":item.stage??state,error:interrupted?(item.renderMode==="live"?"The narrated render worker stopped. Retry manually to avoid an unexpected provider charge.":"The render worker stopped. A new attempt is queued from the approved storyboard."):item.error??null,retryable:state==="failed"&&item.retryable===true,cancelRequested:active&&!interrupted&&item.cancelRequested===true,updated,outputReady:false,created:item.created,replacementId:item.replacementReady?item.replacementId:undefined};
  }
  const interrupted=item.state==="failed"||(active&&(!Number.isFinite(Date.parse(updated))||now-Date.parse(updated)>staleAfterMs));
  const state=interrupted?"interrupted":item.state;
- return {id:item.id,projectId:item.projectId,storyboardVersion:item.storyboardVersion,state,stage:interrupted?"unavailable":item.stage??state,error:interrupted?"The local render files are unavailable. Start a fresh render from this approved storyboard.":item.error??null,retryable:false,cancelRequested:active&&!interrupted&&item.cancelRequested===true,updated,outputReady:false,created:item.created};
+ return {id:item.id,projectId:item.projectId,storyboardVersion:item.storyboardVersion,renderMode:item.renderMode??"fixture",state,stage:interrupted?"unavailable":item.stage??state,error:interrupted?"The local render files are unavailable. Start a fresh render from this approved storyboard.":item.error??null,retryable:false,cancelRequested:active&&!interrupted&&item.cancelRequested===true,updated,outputReady:false,created:item.created};
 }
 export async function accountJobStatus(item:AccountRender){
  const durable=durableReadyJob(item);

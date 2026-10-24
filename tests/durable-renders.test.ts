@@ -11,6 +11,7 @@ test('completed private renders remain ready without local job files',async()=>{
  assert.deepEqual(ready,durableReadyJob(record));
  assert.equal(ready?.outputReady,true);
  assert.equal(ready?.mediaStorage,'r2');
+ assert.equal(ready?.renderMode,'fixture');
  const unfinished=await accountJobStatus({...record,readyAt:undefined});
  assert.equal(unfinished.state,'missing');
  assert.equal(unfinished.outputReady,false);
@@ -26,6 +27,8 @@ test('account render state survives loss of local job files and stale workers st
  assert.equal(interrupted?.state,'interrupted');
  assert.equal(interrupted?.cancelRequested,false);
  assert.equal(interrupted?.outputReady,false);
+ const liveInterrupted=durableActiveJob({...record,execution:'queue' as const,renderMode:'live' as const,leaseUntil:'2026-10-21T00:00:06.000Z'},Date.parse('2026-10-21T00:00:40.001Z'));
+ assert.match(liveInterrupted?.error??'',/Retry manually/);
  const failed=await accountJobStatus({...record,state:'failed' as const,error:'Render failed',retryable:true,cancelRequested:false});
  assert.equal(failed.state,'interrupted');
  assert.equal(failed.retryable,false);

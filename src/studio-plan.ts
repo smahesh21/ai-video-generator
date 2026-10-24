@@ -65,7 +65,7 @@ function narrationBlocks(text:string,sceneId:string):Plan['scenes'][number]['nar
  if(blocks.length>6)throw Error('Narration needs more than six speech blocks. Shorten this scene before rendering.');
  return blocks.map((block,index)=>({id:`${sceneId}-line-${index+1}`,text:block}));
 }
-export function studioPlan(input:unknown,runId:string,ownerId?:string):Plan{
+export function studioPlan(input:unknown,runId:string,ownerId?:string,mode:Plan['mode']='fixture'):Plan{
  const project=validateStudioSnapshot(input);
  if(!safeId.test(runId))throw Error('Invalid render ID.');
  const motif=inferredMotif(project);
@@ -81,6 +81,9 @@ export function studioPlan(input:unknown,runId:string,ownerId?:string):Plan{
   const events=objects.map((object,item)=>({id:`${id}-event-${item+1}`,targetId:object.id,action:'reveal' as const,cue:{blockId,phrase,occurrence:1},offsetMs:item*180,durationMs:400}));
   return {id,type:index===0?'title' as const:index===5?'takeaway' as const:'labeled-diagram' as const,title:source.title,narration,objects,events,holdMs:200,labelScale:1};
  });
- return validatePlan({schemaVersion:1,ownerId:ownerId?'user_'+createHash('sha256').update(ownerId).digest('hex').slice(0,32):'local',projectId:project.id,versionId:runId,parentVersionId:null,topic:project.topic,audience:project.audience||'Curious learners',learningObjective:`Explain ${project.topic}`.slice(0,600),language:'en',voicePreset:project.voice==='female'?'indian-english-female':'indian-english-male',mode:'fixture',sources:[{id:'studio-visual-directions',text:project.storyboard.approved.scenes.map((scene,index)=>`Scene ${index+1}: ${scene.visual}`).join('\n').slice(0,20000)}],warnings:['Studio fixture render: silent synthetic timing; no Gemini or ElevenLabs call. Scene title and narration match the approved storyboard. Visual directions are retained but simplified to supported schematic graphics. Human review is required.'],scenes});
+ const warning=mode==='live'
+  ?'Narrated studio render: ElevenLabs audio and character timestamps drive captions and motion. Scene title and narration match the approved storyboard. Visual directions are simplified to supported schematic graphics. Human listening and factual review are required.'
+  :'Studio fixture render: silent synthetic timing; no Gemini or ElevenLabs call. Scene title and narration match the approved storyboard. Visual directions are retained but simplified to supported schematic graphics. Human review is required.';
+ return validatePlan({schemaVersion:1,ownerId:ownerId?'user_'+createHash('sha256').update(ownerId).digest('hex').slice(0,32):'local',projectId:project.id,versionId:runId,parentVersionId:null,topic:project.topic,audience:project.audience||'Curious learners',learningObjective:`Explain ${project.topic}`.slice(0,600),language:'en',voicePreset:project.voice==='female'?'indian-english-female':'indian-english-male',mode,sources:[{id:'studio-visual-directions',text:project.storyboard.approved.scenes.map((scene,index)=>`Scene ${index+1}: ${scene.visual}`).join('\n').slice(0,20000)}],warnings:[warning],scenes});
 }
 

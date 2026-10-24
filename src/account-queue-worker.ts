@@ -53,10 +53,12 @@ async function processJob(job:ClaimedJob){
   if(lostLease)throw Error('Render lease unavailable.');
   timer=setInterval(()=>{void beat();},3000);
   timer.unref();
-  const plan=studioPlan(job.snapshot,job.id,job.ownerId);
+  const renderMode=job.renderMode??'fixture';
+  if(renderMode==='live'&&process.env.DRISHVO_LIVE_NARRATION!=='true')throw Error('Narrated rendering is disabled on this worker.');
+  const plan=studioPlan(job.snapshot,job.id,job.ownerId,renderMode);
   const manifest=await createRun(plan);
-  await approveRun(job.id,manifest.planHash,'local-studio-storyboard-review',true);
-  await generate(job.id,{cancelFile:cancelPath});
+  await approveRun(job.id,manifest.planHash,'studio-storyboard-review',renderMode==='fixture');
+  await generate(job.id,{cancelFile:cancelPath,allowLive:renderMode==='live'});
   await beat();
   if(lostLease||await fs.access(cancelPath).then(()=>true,()=>false))throw Error('Render was cancelled before upload.');
   mediaUploadStarted=true;

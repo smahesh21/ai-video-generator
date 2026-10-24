@@ -23,11 +23,16 @@ export async function POST(request:Request){
  try{
   const input=JSON.parse(raw);
   if(accountMode){
-   const checked=await accountSnapshot(request,input);
+   const wrapped=!!input&&typeof input==="object"&&!Array.isArray(input)&&"project" in input;
+   const project=wrapped?input.project:input;
+   const renderMode=wrapped&&input.renderMode==="live"?"live":"fixture";
+   if(renderMode==="live"&&process.env.DRISHVO_LIVE_NARRATION!=="true")return Response.json({error:"Narrated rendering is not enabled on this environment yet."},{status:503});
+   const checked=await accountSnapshot(request,project);
    if(checked.status!==200)return Response.json({error:checked.error},{status:checked.status});
-   const job=await enqueueAccountJob(checked.identity.id,checked.snapshot);
+   const job=await enqueueAccountJob(checked.identity.id,checked.snapshot,renderMode);
    return Response.json(job,{status:202,headers:{"Cache-Control":"private, no-store"}});
   }
+  if(input?.renderMode||input?.project)throw Error("Narrated rendering requires account mode.");
   const job=await startJob(input);
   return Response.json(job,{status:202,headers:{"Cache-Control":"no-store"}});
  }

@@ -25,6 +25,14 @@ test('studio render uses the exact approved copy and remains a fixture',()=>{
  assert.deepEqual(render.scenes.map(s=>s.narration[0].text),source.storyboard.approved.scenes.map(s=>s.narration));
  assert.match(render.sources[0].text,/Show diagram 6/);
 });
+test('studio narrated render preserves approved copy and selected voice',()=>{
+ const source=studioSnapshot();source.voice='male';
+ const render=studioPlan(source,'studio_live','owner','live');
+ assert.equal(render.mode,'live');
+ assert.equal(render.voicePreset,'indian-english-male');
+ assert.deepEqual(render.scenes.map(scene=>speechInput(scene).text),source.storyboard.approved.scenes.map(scene=>scene.narration));
+ assert.ok(render.warnings[0].includes('ElevenLabs audio'));
+});
 test('studio render safely splits AI narration longer than the old fixture limit',()=>{
  const source=studioSnapshot();
  source.storyboard.scenes[2].narration=('A clear explanation uses approved words and remains readable. ').repeat(6).trim();
