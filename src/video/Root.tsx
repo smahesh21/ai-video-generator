@@ -38,12 +38,9 @@ const SceneView:React.FC<{item:TimedScene;index:number;count:number;fixture:bool
  <div style={{position:'absolute',left:64,right:64,top:205}}><div style={{fontSize:19,letterSpacing:4,color:accent,marginBottom:30}}>A LITTLE CURIOSITY GOES A LONG WAY</div><h1 data-layout="heading" style={{fontSize:75,lineHeight:1.2,letterSpacing:-3,fontWeight:600,margin:0,maxHeight:260}}>{item.scene.title}</h1></div>
  <Diagram item={item} frame={frame}/>
  <div style={{position:'absolute',top:1110,left:64,right:64,height:1,background:'#d8dfce'}}/>
- <div style={{position:'absolute',top:1160,left:64,right:64,color:muted,fontSize:22,letterSpacing:2}}>FOLLOW THE EXPLANATION</div>
- <div style={{position:'absolute',top:1230,left:64,right:64,height:12,borderRadius:12,background:'#dbe2d0'}}><div style={{height:12,width:`${Math.min(100,frame/item.frames*100)}%`,borderRadius:12,background:ink}}/><div style={{position:'absolute',top:-15,left:`${Math.min(98,frame/item.frames*98)}%`,width:40,height:40,borderRadius:'50%',background:accent,border:'7px solid '+paper}}/></div>
- <div style={{position:'absolute',left:64,right:64,top:1460,height:185,display:'flex',alignItems:'center',justifyContent:'center',background:caption?'#294934':'transparent',borderRadius:20,padding:'24px 30px'}}>
+ <div style={{position:'absolute',left:64,right:64,top:1240,height:185,display:'flex',alignItems:'center',justifyContent:'center',background:caption?'#294934':'transparent',borderRadius:20,padding:'24px 30px'}}>
  <div data-layout="caption" style={{width:'100%',fontSize:36,lineHeight:1.25,color:'white',textAlign:'center',maxHeight:136}}>{caption?.text??''}</div></div>
  <div style={{position:'absolute',left:64,right:64,bottom:155,fontSize:17,color:muted,letterSpacing:2}}>{fixture?'SILENT FIXTURE · SYNTHETIC TIMING · NO AI VOICE':'AI NARRATION · REVIEW BEFORE SHARING'}</div>
- <div style={{position:'absolute',bottom:135,left:64,right:64,height:4,background:'#dbe2d0'}}><div style={{height:4,width:Math.min(100,frame/item.frames*100)+'%',background:ink}}/></div>
  </AbsoluteFill>;
 };
 export const Video:React.FC<{timeline:Timeline}>=({timeline})=>{
