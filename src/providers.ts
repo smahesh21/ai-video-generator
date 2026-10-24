@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import {validatePlan,speechInput,type Plan,type Scene,type Alignment} from './contracts';
 import {fixturePlan} from './fixtures';
-export const model=()=>process.env.GEMINI_MODEL||'gemini-3.5-flash';
+export const model=()=>process.env.GEMINI_MODEL||'gemini-3.6-flash';
 export function speechConfig(plan:Plan){
  if(plan.mode==='fixture')return {voiceId:'silent-'+plan.voicePreset,model:'silent-fixture-v1',provider:'fixture'};
  const key=plan.voicePreset==='indian-english-male'?'ELEVENLABS_VOICE_ID_INDIAN_MALE':'ELEVENLABS_VOICE_ID_INDIAN_FEMALE';const voiceId=process.env[key];
@@ -15,6 +15,7 @@ export async function providerJson(url:string,init:RequestInit,provider:string,f
   const timedOut=error instanceof DOMException&&error.name==='TimeoutError';
   throw Error(provider+(timedOut?' request timed out.':' request could not be reached.')+' No automatic paid retry; inspect provider status and try again explicitly.');
  }
+ if(response.status===503)throw Error(provider+' request failed because the service is temporarily unavailable (HTTP 503). Your draft is saved. Try again in a moment; no automatic retry was made.');
  if(!response.ok)throw Error(provider+' request failed (HTTP '+response.status+'). No automatic paid retry; inspect configuration, quota, or request validity.');
  return response.json();
 }
