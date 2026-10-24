@@ -8,7 +8,7 @@
   },
   "scripts": {
     "pipeline": "tsx src/cli.ts",
-    "test": "tsx --test tests/pipeline.test.ts tests/studio-approvals.test.ts tests/private-media.test.ts tests/durable-renders.test.ts tests/account-worker-health.test.ts tests/worker-operations.test.ts tests/worker-run-cleanup.test.ts tests/worker-alerts.test.ts tests/render-capacity.test.ts tests/live-storyboard.test.ts",
+    "test": "tsx --test tests/pipeline.test.ts tests/studio-approvals.test.ts tests/private-media.test.ts tests/durable-renders.test.ts tests/account-worker-health.test.ts tests/worker-operations.test.ts tests/worker-run-cleanup.test.ts tests/worker-alerts.test.ts tests/render-capacity.test.ts tests/live-storyboard.test.ts tests/instagram.test.ts",
     "typecheck": "tsc --noEmit",
     "test:integration": "tsx --test tests/integration.test.ts",
     "test:queue-recovery": "tsx tests/queue-recovery.integration.ts",
