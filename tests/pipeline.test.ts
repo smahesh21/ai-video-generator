@@ -11,9 +11,27 @@ import {runDir,withLock} from '../src/storage';
 import {extractPlannerText,planLive,providerJson,synthesize} from '../src/providers';
 import {studioPlan,validateStudioSnapshot,type StudioSnapshot} from '../src/studio-plan';
 import {workerInterrupted,WORKER_GRACE_MS} from '../src/worker-health';
+import {objectMotion} from '../src/video/motion';
 const plan=()=>fixturePlan('water','test-run');
 function artifacts(p=plan()):SpeechArtifact[]{return p.scenes.map(s=>({key:'test',file:'audio.wav',hash:'audiohash',duration:11.8,alignment:fixtureAlignment(speechInput(s).text,11.8),provider:'fixture',model:'fixture',voiceId:'fixture',fixture:true}));}
 test('all three topic fixtures validate',()=>{for(const topic of ['water','ram','binary'])assert.equal(fixturePlan(topic,'test').scenes.length,6);});
+test('renderer motion uses reveal and later highlight cues for the same object',()=>{
+ const events=[{targetId:'earth',action:'reveal',start:20,end:32},{targetId:'earth',action:'highlight',start:60,end:80}];
+ assert.equal(objectMotion('labeled-diagram',0,2,events,10).opacity,0);
+ assert.equal(objectMotion('labeled-diagram',0,2,events,45).opacity,1);
+ const normal=objectMotion('labeled-diagram',0,2,events,50);
+ const highlighted=objectMotion('labeled-diagram',0,2,events,70);
+ assert.ok(highlighted.highlight>.9);
+ assert.ok(highlighted.scale>normal.scale+.08);
+ assert.equal(objectMotion('labeled-diagram',0,2,events,90).highlight,0);
+});
+test('scene types produce materially different object choreography',()=>{
+ const events=[{targetId:'object',action:'reveal',start:20,end:32}];
+ const flow=objectMotion('process-flow',0,2,events,25);
+ const comparison=objectMotion('comparison',0,2,events,25);
+ assert.ok(Math.abs(flow.x-comparison.x)>20);
+ assert.ok(Math.abs(flow.y-comparison.y)>5);
+});
 function studioSnapshot():StudioSnapshot{
  const scenes=Array.from({length:6},(_,i)=>({id:`scene-${i+1}`,title:`Scene ${i+1}`,narration:`  A precise fact for scene ${i+1}.  `,visual:`Show diagram ${i+1}.`,seconds:12}));
  return {id:'studio-test',topic:'Water cycle',notes:'',audience:'Students',voice:'female',motif:'water',storyboard:{version:1,scenes,approved:{version:1,scenes:structuredClone(scenes),at:'2026-10-19T00:00:00.000Z'}}};
@@ -87,7 +105,7 @@ test('unknown normalization fails closed',()=>assert.throws(()=>validateAlignmen
 test('alignment arrays must have matching lengths',()=>{const a=fixtureAlignment('text',3);a.characters.pop();assert.throws(()=>validateAlignment(a,'text',3));});
 test('alignment rejects negative and out-of-order timing',()=>{const a=fixtureAlignment('text',3);a.character_start_times_seconds[2]=-1;assert.throws(()=>validateAlignment(a,'text',3));});
 test('alignment rejects out-of-bounds end',()=>{const a=fixtureAlignment('text',3);a.character_end_times_seconds[3]=5;assert.throws(()=>validateAlignment(a,'text',3));});
-test('six scenes compile to exactly 72 seconds',()=>{const p=plan();const t=compile(p,artifacts(p),'font');assert.equal(t.durationInFrames,2160);assert.equal(t.scenes[1].start,360);assert(t.scenes.every(s=>s.events.every(e=>e.start>=0&&e.end<=s.frames)));});
+test('six scenes compile to exactly 72 seconds',()=>{const p=plan();const t=compile(p,artifacts(p),'font');assert.equal(t.durationInFrames,2160);assert.equal(t.componentVersion,'motion-3');assert.equal(t.scenes[1].start,360);assert(t.scenes.every(s=>s.events.every(e=>e.start>=0&&e.end<=s.frames)));});
 test('too-short output rejected instead of padded',()=>{const p=plan();const a=artifacts(p);a.forEach((x,i)=>{x.duration=2;x.alignment=fixtureAlignment(speechInput(p.scenes[i]).text,2);});assert.throws(()=>compile(p,a,'font'),/Duration/);});
 test('visual edit keeps speech cache key',()=>{const s=plan().scenes[0];const before=speechKey(s,'voice','model','fixture');s.labelScale=1.1;assert.equal(speechKey(s,'voice','model','fixture'),before);});
 test('narration, voice, model changes invalidate speech cache',()=>{const s=plan().scenes[0];const before=speechKey(s,'voice','model','fixture');assert.notEqual(speechKey(s,'other','model','fixture'),before);assert.notEqual(speechKey(s,'voice','other','fixture'),before);s.narration[0].text+=' New text.';assert.notEqual(speechKey(s,'voice','model','fixture'),before);});

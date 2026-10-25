@@ -27,7 +27,7 @@ export function compile(plan:Plan,artifacts:SpeechArtifact[],fontHash:string):Ti
  const item={scene,start,frames:frameCount,audioFile:audio.file,audioHash:audio.hash,words:wordData,captions,events};start+=frameCount;return item;
  });
  if(start<1800||start>2700)throw Error('Duration outside 60–90 seconds. Revise narration and approve a new plan; audio will not be clipped.');
- return {compilerVersion:VERSION,componentVersion:'motion-2',planHash:hash(plan),mode:plan.mode,fps:30,width:1080,height:1920,durationInFrames:start,topic:plan.topic,scenes,fontHash};
+ return {compilerVersion:VERSION,componentVersion:'motion-3',planHash:hash(plan),mode:plan.mode,fps:30,width:1080,height:1920,durationInFrames:start,topic:plan.topic,scenes,fontHash};
 }
 export function silentWav(duration:number):Buffer{
  const sampleRate=24000;const dataSize=Math.round(duration*sampleRate)*2;const b=Buffer.alloc(44+dataSize);b.write('RIFF',0);b.writeUInt32LE(36+dataSize,4);b.write('WAVEfmt ',8);b.writeUInt32LE(16,16);b.writeUInt16LE(1,20);b.writeUInt16LE(1,22);b.writeUInt32LE(sampleRate,24);b.writeUInt32LE(sampleRate*2,28);b.writeUInt16LE(2,32);b.writeUInt16LE(16,34);b.write('data',36);b.writeUInt32LE(dataSize,40);return b;

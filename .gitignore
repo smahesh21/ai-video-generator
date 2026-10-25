@@ -10,3 +10,5 @@ runs/
 *.tsbuildinfo
 playwright-report/
 test-results/
+
+apps/studio/certificates/

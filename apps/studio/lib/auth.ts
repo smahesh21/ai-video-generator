@@ -8,7 +8,7 @@ import {mongoClient,mongoDb} from "./mongo";
 const config=accountMode?requireAccountConfig():null;
 function localAlternateOrigin(baseURL:string){
  const url=new URL(baseURL);
- if(url.protocol!=="http:"||!["127.0.0.1","localhost"].includes(url.hostname))return [];
+ if(!["http:","https:"].includes(url.protocol)||!["127.0.0.1","localhost"].includes(url.hostname))return [];
  url.hostname=url.hostname==="localhost"?"127.0.0.1":"localhost";
  return [url.origin];
 }
