@@ -1,6 +1,6 @@
 # Instagram delivery in internal V1
 
-Drishvo's Instagram delivery code is implemented, but live delivery stays disabled until the Instagram tester account is restored and the Studio has a public HTTPS origin.
+Drishvo's Instagram delivery code is deployed to the internal Studio and publisher VM. The Meta tester account shows green Account Status checks, but a fresh OAuth connection and live Reel acceptance have not yet passed.
 
 ## Creator behavior
 
@@ -51,7 +51,7 @@ The limits are configurable through the credential-free `.env.example`. Duplicat
 
 ## Live acceptance still required
 
-After Meta restores the tester account and public HTTPS hosting exists:
+With the public HTTPS Studio and publisher running:
 
 1. Complete OAuth and confirm the expected username and account type.
 2. Publish one reviewed narrated Reel immediately.
