@@ -7,10 +7,11 @@ import {sameOriginMutation} from '../../../lib/account-render';
 import {validProject,type Project} from '../../../lib/project-schema';
 import {planLive,model} from '../../../../../src/providers';
 import {studioScenesFromPlan} from '../../../../../src/live-storyboard';
+import {consumeDailyAllowance} from '../../../lib/usage-limits';
 
 export const runtime='nodejs';
 
-async function authorizedProject(request:Request,input:unknown):Promise<{project?:Project;error?:string;status:number}>{
+async function authorizedProject(request:Request,input:unknown):Promise<{project?:Project;ownerId?:string;error?:string;status:number}>{
  if(!validProject(input))return {error:'The saved project is invalid.',status:400};
  if(!accountMode)return {project:input,status:200};
  const identity=await accountIdentity(request);
@@ -19,7 +20,7 @@ async function authorizedProject(request:Request,input:unknown):Promise<{project
  const project=saved.projects?.find(item=>item.id===input.id);
  if(!project)return {error:'Save this project before generating its storyboard.',status:404};
  for(const key of ['topic','notes','audience','voice'] as const)if(project[key]!==input[key])return {error:'This project changed. Reload it before generating a storyboard.',status:409};
- return {project,status:200};
+ return {project,ownerId:identity.id,status:200};
 }
 
 export async function POST(request:Request){
@@ -33,6 +34,7 @@ export async function POST(request:Request){
   const checked=await authorizedProject(request,input);
   if(!checked.project)return Response.json({error:checked.error},{status:checked.status});
   if(!process.env.GEMINI_API_KEY?.trim())return Response.json({error:'Gemini storyboard generation is not configured.'},{status:503});
+  if(checked.ownerId){const allowance=await consumeDailyAllowance(checked.ownerId,'gemini_storyboard');if(!allowance.allowed)return Response.json({error:`Daily storyboard limit reached (${allowance.limit}). Your saved idea is unchanged; try again tomorrow.`},{status:429});}
   const project=checked.project;
   const context=[project.notes.trim(),project.audience.trim()?`Audience: ${project.audience.trim()}`:''].filter(Boolean).join('\n');
   const runId='studio_'+randomUUID().replaceAll('-','').slice(0,24);

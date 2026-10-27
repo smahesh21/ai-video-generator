@@ -16,3 +16,22 @@ services:
     mem_limit: 3g
     cpus: 2
     stop_grace_period: 90s
+  instagram-publisher:
+    profiles: ["instagram"]
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    image: drishvo-worker:local
+    init: true
+    restart: unless-stopped
+    command: ["./node_modules/.bin/tsx", "src/instagram-publish-worker.ts"]
+    env_file:
+      - ${DRISHVO_WORKER_ENV_FILE:?Set DRISHVO_WORKER_ENV_FILE to an absolute path outside the repository}
+    environment:
+      DRISHVO_AUTH_MODE: accounts
+      WORKER_HEALTH_PORT: ""
+    mem_limit: 512m
+    cpus: 0.5
+    stop_grace_period: 30s
+    healthcheck:
+      disable: true

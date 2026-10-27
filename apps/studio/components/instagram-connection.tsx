@@ -6,14 +6,23 @@ import {useStudio,type Project} from "./store";
 type ConnectionView={id:string;revision:number;state:"connected"|"expiring"|"reconnect_required"|"disconnected";account:{id:string;username:string;type:"BUSINESS"|"CREATOR"};destinationEpoch:number;expiresAt:string|null;publishingAvailable:boolean;pendingIntentCount:number};
 type Status={loading:boolean;available:boolean;connection:ConnectionView|null;message:string};
 
-function resultMessage(){
- if(typeof window==="undefined")return "";
- const result=new URLSearchParams(window.location.search).get("instagram");
+export function instagramResultMessage(search:string){
+ const params=new URLSearchParams(search);
+ const result=params.get("instagram");
  if(result==="connected")return "Instagram connected. Your drafts remain private until you explicitly publish.";
  if(result==="cancelled")return "Instagram connection was cancelled. No account was linked.";
- if(result==="error")return "Instagram could not be connected. Your project is safe; try again when ready.";
+ if(result==="error"){
+  const stage=params.get("instagram_stage");
+  if(stage==="authorization")return "Instagram did not issue a connection token. If your account is under review, wait for Meta to restore it, then reconnect.";
+  if(stage==="token_exchange")return "Instagram approved access, but the secure long-lived token exchange failed. Your project is safe; reconnect when ready.";
+  if(stage==="account_lookup")return "Instagram authorized the app, but no eligible professional account was returned. Confirm the account is Business or Creator, then reconnect.";
+  if(stage==="storage")return "Instagram authorized the app, but Drishvo could not save the encrypted connection. Your project is safe; try again.";
+  return "Instagram could not be connected. Your project is safe; try again when ready.";
+ }
  return "";
 }
+
+function resultMessage(){return typeof window==="undefined"?"":instagramResultMessage(window.location.search);}
 
 function Connection({project}:{project:Project}){
  const [status,setStatus]=useState<Status>({loading:true,available:false,connection:null,message:""});

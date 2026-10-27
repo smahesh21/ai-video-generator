@@ -1,13 +1,13 @@
 import {accountIdentity} from "../../../../lib/account-access";
 import {accountMode} from "../../../../lib/account-mode";
 import {requireInstagramConfig} from "../../../../lib/instagram-config";
-import {consumeInstagramState,exchangeInstagramCode,saveInstagramConnection} from "../../../../lib/instagram";
+import {consumeInstagramState,exchangeInstagramCode,instagramFailureStage,saveInstagramConnection,type InstagramFailureStage} from "../../../../lib/instagram";
 
 export const runtime="nodejs";
 
-function destination(origin:string,projectId:string|undefined,outcome:"connected"|"cancelled"|"error"){
+function destination(origin:string,projectId:string|undefined,outcome:"connected"|"cancelled"|"error",stage?:InstagramFailureStage){
  const path=projectId?`/projects/${encodeURIComponent(projectId)}/publish/connection`:"/projects";
- const url=new URL(path,origin);url.searchParams.set("instagram",outcome);return url;
+ const url=new URL(path,origin);url.searchParams.set("instagram",outcome);if(outcome==="error"&&stage&&stage!=="unknown")url.searchParams.set("instagram_stage",stage);return url;
 }
 
 export async function GET(request:Request){
@@ -28,5 +28,5 @@ export async function GET(request:Request){
   const result=await exchangeInstagramCode(code);
   await saveInstagramConnection(identity.id,result);
   return Response.redirect(destination(origin,state.returnProjectId,"connected"),303);
- }catch(error){console.error("Instagram callback failed:",error instanceof Error?error.message:"Unknown provider error");return Response.redirect(destination(origin,state.returnProjectId,"error"),303);}
+ }catch(error){const stage=instagramFailureStage(error);console.error("Instagram callback failed:",stage,error instanceof Error?error.message:"Unknown provider error");return Response.redirect(destination(origin,state.returnProjectId,"error",stage),303);}
 }

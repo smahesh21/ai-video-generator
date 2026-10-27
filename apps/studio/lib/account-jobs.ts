@@ -4,6 +4,7 @@ import type {StudioSnapshot} from "../../../src/studio-plan";
 import {studioPlan} from "../../../src/studio-plan";
 import {randomUUID} from "node:crypto";
 import {createHash} from "node:crypto";
+import {consumeDailyAllowance} from "./usage-limits";
 
 type ActiveState="queued"|"running"|"ready"|"failed"|"cancelled"|"interrupted";
 export type AccountRenderMode="fixture"|"live";
@@ -21,6 +22,10 @@ export async function recordAccountJob(ownerId:string,job:Omit<AccountRender,"ow
  await records.insertOne({...job,ownerId,state:"queued",stage:"queued",updated:job.created,cancelRequested:false});
 }
 export async function enqueueAccountJob(ownerId:string,snapshot:StudioSnapshot,renderMode:AccountRenderMode="fixture"){
+ const {records,ready}=collection();await ready;
+ const active=await records.findOne({ownerId,state:{$in:["queued","running"]}},{projection:{_id:1}});
+ if(active)throw Error("Finish or cancel the current render before starting another one.");
+ if(renderMode==="live"){const allowance=await consumeDailyAllowance(ownerId,"live_render");if(!allowance.allowed)throw Error(`Daily narrated-render limit reached (${allowance.limit}). Try again tomorrow.`);}
  const created=new Date().toISOString(),id="studio_"+randomUUID().replaceAll("-","").slice(0,24);
  studioPlan(snapshot,id,ownerId,renderMode);
  const job={id,projectId:snapshot.id,storyboardVersion:snapshot.storyboard.version,created,snapshot,execution:"queue" as const,renderMode};
