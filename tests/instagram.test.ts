@@ -40,6 +40,11 @@ test("Instagram OAuth failures retain a safe actionable stage",async()=>{
   call=0;
   globalThis.fetch=(async()=>{call++;if(call===1)return Response.json({access_token:"short-token",user_id:"1"});if(call===2)return Response.json({access_token:"long-token",expires_in:3600});return Response.json({id:"1",username:"test-user",account_type:"PERSONAL"});}) as typeof fetch;
   await assert.rejects(()=>exchangeInstagramCode("test-code"),error=>error instanceof Error&&instagramFailureStage(error)==="account_lookup");
+  call=0;
+  globalThis.fetch=(async()=>{call++;if(call===1)return Response.json({access_token:"short-token",user_id:"1"});if(call===2)return Response.json({access_token:"long-token",expires_in:3600});return Response.json({id:"1",username:"test-user",account_type:"MEDIA_CREATOR"});}) as typeof fetch;
+  const creator=await exchangeInstagramCode("test-code");
+  assert.equal(creator.accountType,"CREATOR");
+  assert.equal(creator.username,"test-user");
  }finally{
   globalThis.fetch=originalFetch;
   if(original.enabled===undefined)delete process.env.DRISHVO_INSTAGRAM_ENABLED;else process.env.DRISHVO_INSTAGRAM_ENABLED=original.enabled;

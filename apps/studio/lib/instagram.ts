@@ -81,9 +81,10 @@ export async function exchangeInstagramCode(code:string){
  profileUrl.searchParams.set("fields","id,user_id,username,account_type");profileUrl.searchParams.set("access_token",token);
  const profile=await providerResponse<{id?:string;user_id?:string;username?:string;account_type?:string}>(fetch(profileUrl,{cache:"no-store",signal:AbortSignal.timeout(15000)}),"Instagram account lookup","account_lookup");
  const accountId=String(profile.user_id??profile.id??short.user_id??"");
- const accountType=profile.account_type?.toUpperCase();
- if(!accountId||!profile.username||!(["BUSINESS","CREATOR"].includes(accountType??"")))throw new InstagramConnectionError("account_lookup","An eligible Instagram professional account was not returned.");
- return {accountId,username:profile.username,accountType:accountType as "BUSINESS"|"CREATOR",token,expiresAt:typeof long.expires_in==="number"?new Date(Date.now()+long.expires_in*1000):null};
+ const rawAccountType=profile.account_type?.toUpperCase();
+ const accountType: "BUSINESS"|"CREATOR"|null=rawAccountType==="MEDIA_CREATOR"||rawAccountType==="CREATOR"?"CREATOR":rawAccountType==="BUSINESS"?"BUSINESS":null;
+ if(!accountId||!profile.username||!accountType)throw new InstagramConnectionError("account_lookup",`An eligible Instagram professional account was not returned (type: ${rawAccountType??"missing"}).`);
+ return {accountId,username:profile.username,accountType,token,expiresAt:typeof long.expires_in==="number"?new Date(Date.now()+long.expires_in*1000):null};
 }
 
 export async function saveInstagramConnection(ownerId:string,result:Awaited<ReturnType<typeof exchangeInstagramCode>>){
