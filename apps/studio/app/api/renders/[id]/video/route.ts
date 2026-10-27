@@ -6,6 +6,7 @@ import path from "node:path";
 import {jobDir,localRequest,readJob} from "../../../../../lib/local-render";
 import {privateMediaSize,readPrivateMedia} from "../../../../../../../src/private-media";
 export const runtime="nodejs";
+const maxResponseBytes=1024*1024;
 export async function GET(request:Request,{params}:{params:Promise<{id:string}>}){
  const {id}=await params;
  let job:{outputReady:boolean;mediaStorage?:string}|null;
@@ -19,8 +20,8 @@ export async function GET(request:Request,{params}:{params:Promise<{id:string}>}
  catch{return new Response(remote?"Private video storage is unavailable.":"Video not found.",{status:remote?503:404});}
  if(!Number.isSafeInteger(size)||size<1)return new Response("Video is unavailable.",{status:503});
   const range=request.headers.get("range");
-  let start=0,end=size-1,status=200;
-  if(range){const match=/^bytes=(\d+)-(\d*)$/.exec(range);if(!match)return new Response(null,{status:416,headers:{"Content-Range":`bytes */${size}`}});start=Number(match[1]);const requestedEnd=match[2]?Number(match[2]):size-1;end=Math.min(size-1,requestedEnd);if(!Number.isSafeInteger(start)||!Number.isSafeInteger(requestedEnd)||start>=size||end<start)return new Response(null,{status:416,headers:{"Content-Range":`bytes */${size}`}});status=206;}
+  let start=0,end=Math.min(size-1,maxResponseBytes-1),status=size>maxResponseBytes?206:200;
+  if(range){const match=/^bytes=(\d+)-(\d*)$/.exec(range);if(!match)return new Response(null,{status:416,headers:{"Content-Range":`bytes */${size}`}});start=Number(match[1]);const requestedEnd=match[2]?Number(match[2]):size-1;end=Math.min(size-1,requestedEnd,start+maxResponseBytes-1);if(!Number.isSafeInteger(start)||!Number.isSafeInteger(requestedEnd)||start>=size||end<start)return new Response(null,{status:416,headers:{"Content-Range":`bytes */${size}`}});status=206;}
   const headers:Record<string,string>={"Content-Type":"video/mp4","Content-Length":String(end-start+1),"Accept-Ranges":"bytes","Cache-Control":"private, no-store"};
   if(status===206)headers["Content-Range"]=`bytes ${start}-${end}/${size}`;
   if(new URL(request.url).searchParams.get("download")==="1")headers["Content-Disposition"]=`attachment; filename="drishvo-${id}.mp4"`;
