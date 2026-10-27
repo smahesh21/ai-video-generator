@@ -12,10 +12,15 @@ function localAlternateOrigin(baseURL:string){
  url.hostname=url.hostname==="localhost"?"127.0.0.1":"localhost";
  return [url.origin];
 }
+function deploymentOrigin(){
+ const hostname=process.env.VERCEL_URL?.trim().toLowerCase();
+ if(!hostname||!/^[-a-z0-9]+\.vercel\.app$/.test(hostname))return [];
+ return [`https://${hostname}`];
+}
 export const auth=config?betterAuth({
  appName:"drishvo.co.in",
  baseURL:config.baseURL,
- trustedOrigins:localAlternateOrigin(config.baseURL),
+ trustedOrigins:[...localAlternateOrigin(config.baseURL),...deploymentOrigin()],
  secret:config.secret,
  database:mongodbAdapter(mongoDb(),{client:mongoClient()}),
  emailAndPassword:{enabled:true,disableSignUp:true,minPasswordLength:12,maxPasswordLength:128},
