@@ -5,6 +5,7 @@ import {studioPlan} from "../../../src/studio-plan";
 import {randomUUID} from "node:crypto";
 import {createHash} from "node:crypto";
 import {consumeDailyAllowance} from "./usage-limits";
+import {liveNarrationLengthError,narrationWordCount,suggestedNarrationWords} from "./narration-length";
 
 type ActiveState="queued"|"running"|"ready"|"failed"|"cancelled"|"interrupted";
 export type AccountRenderMode="fixture"|"live";
@@ -25,9 +26,13 @@ export async function enqueueAccountJob(ownerId:string,snapshot:StudioSnapshot,r
  const {records,ready}=collection();await ready;
  const active=await records.findOne({ownerId,state:{$in:["queued","running"]}},{projection:{_id:1}});
  if(active)throw Error("Finish or cancel the current render before starting another one.");
- if(renderMode==="live"){const allowance=await consumeDailyAllowance(ownerId,"live_render");if(!allowance.allowed)throw Error(`Daily narrated-render limit reached (${allowance.limit}). Try again tomorrow.`);}
  const created=new Date().toISOString(),id="studio_"+randomUUID().replaceAll("-","").slice(0,24);
  studioPlan(snapshot,id,ownerId,renderMode);
+ if(renderMode==="live"){
+  const lengthError=liveNarrationLengthError(snapshot.storyboard.approved.scenes);
+  if(lengthError)throw Error(lengthError);
+  const allowance=await consumeDailyAllowance(ownerId,"live_render");if(!allowance.allowed)throw Error(`Daily narrated-render limit reached (${allowance.limit}). Try again tomorrow.`);
+ }
  const job={id,projectId:snapshot.id,storyboardVersion:snapshot.storyboard.version,created,snapshot,execution:"queue" as const,renderMode};
  await recordAccountJob(ownerId,job);
  return {id,projectId:job.projectId,storyboardVersion:job.storyboardVersion,renderMode};
@@ -83,6 +88,12 @@ export async function cancelQueuedAccountJob(ownerId:string,id:string){
 }
 export async function retryQueuedAccountJob(ownerId:string,id:string){
  const {records,ready}=collection();await ready;
+ const existing=await records.findOne({ownerId,id,execution:"queue",state:"failed",snapshot:{$exists:true}});
+ if(existing?.renderMode==="live"){
+  if(existing.error?.startsWith("Duration outside 60–90 seconds"))throw Error("Revise the narration and approve a new storyboard version; retrying the same audio cannot change its duration.");
+  const lengthError=liveNarrationLengthError(existing.snapshot!.storyboard.approved.scenes);
+  if(lengthError)throw Error(lengthError);
+ }
  const result=await records.updateOne({ownerId,id,execution:"queue",state:"failed",snapshot:{$exists:true}},{$set:{state:"queued",stage:"queued",error:null,retryable:false,cancelRequested:false,updated:new Date().toISOString()},$unset:{workerId:"",leaseUntil:""}});
  if(result.matchedCount!==1)throw Error("This render cannot be retried. Start a fresh render from the approved storyboard.");
  return {id};
@@ -114,7 +125,9 @@ export function durableActiveJob(item:AccountRender,now=Date.now()){
  if(item.execution==="queue"){
   const interrupted=item.state==="interrupted"||(item.state==="running"&&!!item.leaseUntil&&Date.parse(item.leaseUntil)<now);
   const state=interrupted?"interrupted":item.state;
-  return {id:item.id,projectId:item.projectId,storyboardVersion:item.storyboardVersion,renderMode:item.renderMode??"fixture",state,stage:interrupted?"unavailable":item.stage??state,error:interrupted?(item.renderMode==="live"?"The narrated render worker stopped. Retry manually to avoid an unexpected provider charge.":"The render worker stopped. A new attempt is queued from the approved storyboard."):item.error??null,retryable:state==="failed"&&item.retryable===true,cancelRequested:active&&!interrupted&&item.cancelRequested===true,updated,outputReady:false,created:item.created,replacementId:item.replacementReady?item.replacementId:undefined};
+  const durationFailure=item.renderMode==="live"&&item.error?.startsWith("Duration outside 60–90 seconds")===true;
+  const durationAdvice=durationFailure&&item.snapshot?` The approved narration has ${narrationWordCount(item.snapshot.storyboard.approved.scenes)} words; aim for ${suggestedNarrationWords.min}–${suggestedNarrationWords.max}, revise the storyboard, and approve the new version.`:"";
+  return {id:item.id,projectId:item.projectId,storyboardVersion:item.storyboardVersion,renderMode:item.renderMode??"fixture",state,stage:interrupted?"unavailable":item.stage??state,error:interrupted?(item.renderMode==="live"?"The narrated render worker stopped. Retry manually to avoid an unexpected provider charge.":"The render worker stopped. A new attempt is queued from the approved storyboard."):item.error?item.error+durationAdvice:null,retryable:state==="failed"&&item.retryable===true&&!durationFailure,cancelRequested:active&&!interrupted&&item.cancelRequested===true,updated,outputReady:false,created:item.created,replacementId:item.replacementReady?item.replacementId:undefined};
  }
  const interrupted=item.state==="failed"||(active&&(!Number.isFinite(Date.parse(updated))||now-Date.parse(updated)>staleAfterMs));
  const state=interrupted?"interrupted":item.state;
