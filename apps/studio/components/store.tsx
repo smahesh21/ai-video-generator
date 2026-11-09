@@ -22,7 +22,7 @@ function localSnapshot():{projects:Project[]|null;invalid:boolean}{
 }
 export function StudioProvider({children,accountMode}:{children:ReactNode;accountMode:boolean}){
  const pathname=usePathname();
- const onSignIn=pathname==="/sign-in";
+ const onAuthPage=["/sign-in","/forgot-password","/reset-password"].includes(pathname);
  const [projects,setProjects]=useState<Project[]>([]);
  const [ready,setReady]=useState(false);
  const [error,setError]=useState("");
@@ -31,7 +31,7 @@ export function StudioProvider({children,accountMode}:{children:ReactNode;accoun
   let active=true;
   if(accountMode){revision.current=null;setProjects([]);setReady(false);setError("");}
   async function initialize(){
-   if(accountMode&&onSignIn){if(active)setReady(true);return;}
+   if(accountMode&&onAuthPage){if(active)setReady(true);return;}
    const local=accountMode?{projects:null,invalid:false}:localSnapshot();
    try{
     const response=await fetch("/api/local-projects",{cache:"no-store"});
@@ -61,7 +61,7 @@ export function StudioProvider({children,accountMode}:{children:ReactNode;accoun
   }
   void initialize();
   return()=>{active=false;};
- },[accountMode,onSignIn]);
+ },[accountMode,onAuthPage]);
  async function commit(next:Project[]){
   if(revision.current===null){setError("Local project service unavailable. Your changes have not been saved.");return false;}
   try{
