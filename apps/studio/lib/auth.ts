@@ -3,6 +3,7 @@ import {mongodbAdapter} from "@better-auth/mongo-adapter";
 import {admin} from "better-auth/plugins";
 import {APIError} from "better-auth/api";
 import {accountMode,approvedEmails,requireAccountConfig} from "./account-mode";
+import {sendPasswordResetEmail} from "./account-email";
 import {mongoClient,mongoDb} from "./mongo";
 
 const config=accountMode?requireAccountConfig():null;
@@ -23,7 +24,24 @@ export const auth=config?betterAuth({
  trustedOrigins:[...localAlternateOrigin(config.baseURL),...deploymentOrigin()],
  secret:config.secret,
  database:mongodbAdapter(mongoDb(),{client:mongoClient()}),
- emailAndPassword:{enabled:true,disableSignUp:true,minPasswordLength:12,maxPasswordLength:128},
+ session:{
+  expiresIn:60*60*24,
+  updateAge:60*60*6,
+  freshAge:60*15,
+  cookieCache:{enabled:true,maxAge:60,strategy:"jwe"}
+ },
+ emailAndPassword:{
+  enabled:true,
+  disableSignUp:true,
+  minPasswordLength:12,
+  maxPasswordLength:128,
+  resetPasswordTokenExpiresIn:60*30,
+  revokeSessionsOnPasswordReset:true,
+  sendResetPassword:async({user,url})=>{
+   if(!approvedEmails().has(user.email.toLowerCase()))return;
+   await sendPasswordResetEmail({to:user.email,name:user.name,url});
+  }
+ },
  plugins:[admin()],
  databaseHooks:{
   user:{create:{before:async user=>{

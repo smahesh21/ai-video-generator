@@ -1,5 +1,6 @@
 "use client";
 import {useState,type FormEvent} from "react";
+import Link from "next/link";
 import {authClient} from "../lib/auth-client";
 
 export function SignInForm({next}:{next:string}){
@@ -13,5 +14,5 @@ export function SignInForm({next}:{next:string}){
   }catch{setError("The sign-in service is unavailable. Try again shortly.");}
   finally{setBusy(false);}
  }
- return <div className="sign-in-page"><div className="eyebrow">DRISHVO / PRIVATE STUDIO</div><h1>Welcome back.</h1><p>Sign in with your approved internal account to continue your videos.</p><form onSubmit={submit}><label>Email<input type="email" autoComplete="username" required value={email} onChange={event=>setEmail(event.target.value)}/></label><label>Password<input type="password" autoComplete="current-password" required value={password} onChange={event=>setPassword(event.target.value)}/></label><button className="primary" disabled={busy}>{busy?"Signing in…":"Sign in"}</button>{error?<p role="alert" className="form-message">{error}</p>:null}</form></div>;
+ return <div className="sign-in-page"><div className="eyebrow">DRISHVO / PRIVATE STUDIO</div><h1>Welcome back.</h1><p>Sign in with your approved internal account to continue your videos.</p><form onSubmit={submit}><label>Email<input type="email" autoComplete="username" required value={email} onChange={event=>setEmail(event.target.value)}/></label><label>Password<input type="password" autoComplete="current-password" required value={password} onChange={event=>setPassword(event.target.value)}/></label><button className="primary" disabled={busy}>{busy?"Signing in…":"Sign in"}</button>{error?<p role="alert" className="form-message">{error}</p>:null}</form><Link className="account-recovery-link" href={`/forgot-password?next=${encodeURIComponent(next)}`}>Forgot your password?</Link></div>;
 }
