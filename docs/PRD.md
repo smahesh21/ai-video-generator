@@ -48,6 +48,7 @@ The brand is intentionally broad enough to support other video formats in future
 | Application stack | Next.js / TypeScript with Node.js backend endpoints, MongoDB Atlas, Cloudflare R2, Vercel |
 | Supporting services | Better Auth for authentication; Inngest for durable workflows; Vercel Sandbox as the initial hosted rendering candidate |
 | Backups | No dedicated backup, restore, or disaster-recovery system in V1; retry/regenerate supported |
+| Post-V1 cinematic experiment | Optional LTX-2.5 Fast scene clips, self-hosted on suitable GPU hardware and disabled by default |
 
 ### 2.2 Implementation defaults
 
@@ -112,7 +113,7 @@ Creators will value relevant explanatory visuals, straightforward corrections, a
 
 ### Explicit non-goals
 
-- General-purpose cinematic text-to-video generation or complex character animation.
+- General-purpose cinematic text-to-video generation or complex character animation in V1. A bounded post-V1 LTX experiment is defined below without changing the V1 definition of done.
 - AI avatars, face animation, or voice cloning.
 - Full timeline editing or frame-by-frame editing tools.
 - Branding controls or custom theme editors.
@@ -556,8 +557,11 @@ The planner estimates duration from word count and intended pauses. Once audio e
 | Planning | Gemini API | Ideas, structured storyboard generation, revision interpretation |
 | Speech | ElevenLabs API | Indian English narration and timing |
 | Publishing | Meta Instagram API | Per-user authorization, media preparation, publication, and result lookup |
+| Experimental cinematic visuals | LTX-2.5 Fast through an offline/ComfyUI-compatible GPU worker | Post-V1 visual-only scene clips; disabled unless hardware, licensing, safety, and quality gates pass |
 
 Use one Next.js codebase initially; a separate Express service is not required. Long video renders must not run inside ordinary page/API request handlers. Inngest orchestrates the work but does not itself replace the rendering compute environment.
+
+The optional cinematic experiment must run outside Vercel and outside the existing CPU render worker. It uses a separate GPU worker and a provider-neutral scene contract. The stable motion-graphics renderer remains the default and fallback. LTX-generated dialogue must not replace approved narration: ElevenLabs audio and timestamps remain authoritative, while LTX produces visual-only clips or optional ambience that cannot compete with the narration.
 
 For hosted generation, the workflow starts a render in the configured sandbox, persists its identity, checks completion in bounded steps, then transfers the validated artifact to R2 before ephemeral render storage is discarded. The R2 adapter must be explicit even if an upstream example uses a different storage service. If the benchmark fails because of deployment limits or excessive latency, record a rendering-infrastructure adjustment before implementation proceeds; do not silently assume web hosting solves rendering.
 
@@ -824,6 +828,24 @@ Exit gate: publishing and scheduling acceptance checks pass with required platfo
 Run the representative evaluation set, accessibility checks, authorization/isolation tests, retry/race tests, and founder/team testing with separate accounts. Public launch work remains outside this release.
 
 Exit gate: release acceptance checklist satisfied, known limitations documented, and operational ownership assigned.
+
+### Phase 4: Experimental cinematic visuals after V1
+
+Add an optional **Cinematic AI** visual mode without replacing the completed motion-graphics workflow. The first candidate is self-hosted LTX-2.5 Fast, using its official code and gated model weights under the applicable LTX-2.x Community License.
+
+The experiment proceeds in bounded steps:
+
+1. Convert each approved scene into a versioned visual-only shot request with prompt, negative prompt, deterministic seed, duration, dimensions, frame rate, and expected output name.
+2. Generate one five-second 720 × 1280 clip manually on a compatible free or owner-supplied GPU environment.
+3. Validate complete MP4 decoding, duration, dimensions, frame rate, visual relevance, physical coherence, safety, absence of text/logos/watermarks, and absence of competing dialogue.
+4. Require explicit creator approval before storing or compositing the clip.
+5. Store accepted source clips privately in R2, preserve model/version/settings and licence metadata, and allow per-scene replacement.
+6. Composite approved clips with the existing ElevenLabs narration, captions, branding, timing, and export validation.
+7. Keep motion graphics as the automatic fallback when cinematic generation is disabled, unavailable, unsuitable, or rejected.
+
+This phase must not install model weights on the current development laptop or the current `e2-medium` worker. The laptop's NVIDIA MX350 has 2 GB VRAM and the hosted worker has no GPU. Current LTX guidance recommends substantially more GPU memory and storage; free Colab sessions may be used only for manual experiments because availability and duration are not guaranteed.
+
+Exit gate: at least one approved scene clip passes machine and human review, composites correctly under the existing narration/caption timeline, records its model/licence provenance, and demonstrates an acceptable generation time on identified GPU hardware. No production toggle appears before this gate passes.
 
 No delivery-date commitment is made before the prototype and Meta integration dependencies are assessed.
 

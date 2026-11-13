@@ -1,6 +1,6 @@
 # drishvo.co.in — technology and development order
 
-Updated 22 October 2026. This document separates the working local prototype from the proposed SaaS architecture. See [`status.md`](../status.md) for the feature-by-feature checkpoint.
+Updated 13 November 2026. This document separates the working product from proposed post-V1 experiments. See [`status.md`](../status.md) for the feature-by-feature checkpoint.
 
 ## Product flow
 
@@ -59,6 +59,24 @@ These are design choices recorded in the project documentation, not deployed int
 
 No subscription or billing service is needed in this phase.
 
+## Post-V1 free cinematic experiment
+
+LTX-2.5 Fast is the preferred open-source cinematic candidate. Drishvo will use it only as a separate, disabled-by-default visual provider; the existing motion renderer remains the stable default and fallback. LTX will generate short visual-only scene clips. ElevenLabs remains responsible for approved narration and timestamps, and Remotion/FFmpeg remains responsible for captions, branding, transitions, final timing, and MP4 validation.
+
+The current laptop cannot host the model: its NVIDIA MX350 has 2 GB VRAM. The current `e2-medium` worker has no GPU. Do not install the model on either machine. A manual proof of concept may use a suitable owner-supplied GPU or a temporary free Colab GPU, but Colab is not production infrastructure.
+
+The integration order is:
+
+1. Document the provider-neutral scene contract and licensing boundary.
+2. Prepare an offline batch of five-second 720 × 1280 visual-only requests from an approved storyboard.
+3. Generate and review one scene on compatible hardware.
+4. Add strict MP4 validation and creator approval.
+5. Add private R2 ingestion and per-scene replacement.
+6. Composite accepted clips with the existing voice/caption timeline.
+7. Consider a dedicated GPU worker only after quality, latency, memory, and operational measurements are recorded.
+
+See [`LTX_FREE_SETUP.md`](LTX_FREE_SETUP.md). No paid LTX API, automatic provider retry, local model download, or production feature flag is authorized by this decision.
+
 ## Recommended build sequence
 
 1. **Finish the local render bridge.** Verify a browser-created MP4 plays and downloads, failure/retry states reflect real jobs, and the UI states clearly that fixture audio is silent. This proves the workflow and renderer are connected before introducing external services.
@@ -67,5 +85,6 @@ No subscription or billing service is needed in this phase.
 4. **Connect live AI creation.** Generate storyboard proposals from ideas with Gemini, require creator approval, then use ElevenLabs timestamps to align captions and motion. Run quality checks for factual accuracy, pronunciation, readability, timing, and rendering. Preserve the no-key fixture path for testing.
 5. **Complete publish and schedule.** Connect an eligible Instagram account, confirm the final video/caption, submit media, track delivery or uncertainty, and support scheduled publishing and reconnect handling.
 6. **Prepare SaaS operations.** Add observability, quotas, abuse/cost controls, retention, support tooling, and a release process. Introduce subscription and billing only in the later version already agreed in the PRD.
+7. **Prototype cinematic visuals separately.** Prepare LTX-2.5 Fast scene requests, run one free/manual GPU experiment, and keep the feature disabled until the documented quality and infrastructure gate passes.
 
 The main production design decisions still open are the worker host and restart policy, the exact media retention policy, and the live provider quality/cost thresholds. Those should be resolved against a measured render workload and the PRD's acceptance criteria.

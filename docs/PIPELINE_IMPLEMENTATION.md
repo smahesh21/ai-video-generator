@@ -1,5 +1,5 @@
 # drishvo.co.in — implemented local pipeline
-Updated 18 October 2026.
+Updated 13 November 2026.
 
 ## Relationship to the supplied design
 The unchanged supplied document is in [reference/PIPELINE_TECHNICAL_DESIGN.original.md](reference/PIPELINE_TECHNICAL_DESIGN.original.md). It defines the intended live-generation quality gates. Its historical statements about prior live runs do not describe this checkout. [../PROTOTYPE_STATUS.md](../PROTOTYPE_STATUS.md) records evidence for this implementation.
@@ -45,3 +45,19 @@ This implementation has no authentication, tenant isolation service, database, c
 4. Exercise a live conversational scene revision and narrator change.
 5. Review factual accuracy, visual relevance, caption reading speed and synchronization across complete videos.
 6. Record human scores and output evidence before declaring the source document's live-quality gate passed.
+
+## Post-V1 cinematic extension
+
+The implemented renderer remains the production baseline. A future experimental branch may replace an individual scene's schematic layer with a creator-approved LTX-2.5 Fast MP4 while retaining the same approved narration, alignment, captions, timing, final composition, and output validation.
+
+The extension must be additive:
+
+- one immutable visual-only request and artifact per scene;
+- separate GPU execution outside the current CPU worker;
+- no LTX dialogue or automatic replacement of ElevenLabs narration;
+- private R2 storage only after machine validation and creator approval;
+- stored model, settings, seed, content hash, licence, and review provenance;
+- per-scene failure/rejection returns to motion graphics without changing approved words;
+- no model installation or generation call on the current 2 GB VRAM laptop or no-GPU hosted worker.
+
+The free proof-of-concept and acceptance gate are documented in [LTX_FREE_SETUP.md](LTX_FREE_SETUP.md). No cinematic implementation is complete merely because a prompt or ComfyUI workflow exists; a decoded, reviewed clip must pass the gate first.
